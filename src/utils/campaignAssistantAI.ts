@@ -392,18 +392,38 @@ HTML STRUCTURE GUIDELINES:
 - Include alt text for any images
 - Use semantic HTML elements where appropriate
 
+FORMATTING EXAMPLES:
+- Bold text: <strong style="font-weight: bold;">Important text</strong>
+- Links: <a href="URL" style="color: #0066cc; text-decoration: none;">Link text</a>
+- Lists: <ul style="margin: 10px 0; padding-left: 20px;"><li>Item</li></ul>
+- Headings: <h2 style="color: #333; font-size: 20px; margin: 15px 0 10px 0;">Heading</h2>
+
 CAMPAIGN EXAMPLE GUIDELINE:
 ${JSON.stringify(matchingExample, null, 2)}
 
+CRITICAL WORD COUNT REQUIREMENTS:
+IMPORTANT: Word count refers to READABLE TEXT ONLY, not HTML markup
+- Count only the words that appear when the email is rendered/displayed to the user
+- HTML tags, CSS styles, and markup do not count toward word limits
+- Target length: {lengthSpec.range} ({lengthSpec.description}) of READABLE CONTENT
+- Example: "<p>Hello world</p>" counts as 2 words, not 4
+- Example: "<strong>Important message</strong>" counts as 2 words, not 3
+
+CRITICAL TONE REQUIREMENTS
+ - Tone: ${draft.tone || 'professional'} (apply the following guidelines based on tone):
+  - **Professional**: Use formal language, start with 'Dear {{First Name}}' or 'Hello {{First Name}},' end with 'Sincerely, {{Recruiter Name}}.' Use complete sentences, a neutral, authoritative voice, and concise paragraphs for credibility.
+  - **Friendly**: Use warm, conversational language, start with 'Hey {{First Name}}!' or 'Hi {{First Name}},', end with 'Best, {{Recruiter Name}}.' Use short sentences, supportive phrases (e.g., 'We're excited to help!'), and an approachable style.
+  - **Casual**: Use informal language with slang or contractions, start with 'Hey {{First Name}}' or 'What's up, {{First Name}}?', end with 'Cheers, {{Recruiter Name}}.' Use short, punchy sentences and a playful, relatable tone.
+  - **Formal**: Use precise, sophisticated language, start with 'Dear {{First Name}}' or 'To {{First Name}},', end with 'Yours sincerely, {{Recruiter Name}}.' Avoid contractions, use a respectful, distant voice, and structured paragraphs.
+- CRITICAL: Each email must contain approximately {lengthSpec.range} words of READABLE TEXT (excluding HTML markup), structured for readability with short paragraphs or bullet points. This is a strict requirement.
+
+
 EMAIL LENGTH REQUIREMENTS:
 - Target length: ${lengthSpec.range} (${lengthSpec.description})
-- Tone: ${draft.tone || 'professional'} (apply the following guidelines based on tone):
-  - **Professional**: Use formal language, structured layout, neutral colors
-  - **Friendly**: Use warm colors, conversational tone, approachable design
-  - **Casual**: Use relaxed formatting, informal language, vibrant colors
-  - **Formal**: Use conservative design, precise language, traditional layout
+
 
 COMPANY KNOWLEDGE BASE (COLLATERAL):
+- For links, create appropriate call-to-action text (e.g., "Join our talent community" for talent_community_link)
 ${relevantCompanyCollateral.length > 0 ? JSON.stringify(formattedCollateral, null, 2) : 'No company collateral available.'}
 
 COLLATERAL USAGE INSTRUCTIONS:
@@ -422,6 +442,11 @@ ADDITIONAL CONTEXT USAGE:
 - This content should inform and shape the email sequence while maintaining consistency with the source material's tone, style, and messaging
 - Integrate this content naturally into the emails while preserving its original details and nuances
 
+CRITICAL HTML EMAIL TEMPLATE STRUCTURE:
+Each email content should follow this structure:
+\`\`\`html
+<!DOCTYPE html><html><head><meta charset="UTF-8" name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0; font-family:Arial, sans-serif; background:#f4f4f4;"><table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px; margin:0 auto; background:#fff;"><tr><td style="padding:20px;"><h2 style="color:#333; font-size:18px; margin:0 0 10px;">Hi {{First Name}},</h2><p style="color:#555; font-size:14px; margin:0 0 15px;">[Main content]</p><a href="{{CTA_Link}}" style="display:inline-block; background:#0066cc; color:#fff; padding:10px 20px; text-decoration:none; border-radius:5px;">[CTA Text]</a><p style="color:#888; font-size:12px; margin:15px 0 0;">{{Recruiter Name}}, {{Company Name}} | <a href="{{Unsubscribe_Link}}" style="color:#0066cc;">Unsubscribe</a></p></td></tr></table></body></html>
+\`\`\`
 
 RESPONSE FORMAT:
 Return a JSON object with:
@@ -450,20 +475,22 @@ Return a JSON object with:
 }
 
 IMPORTANT:
-- Create ${matchingExample.sequenceAndExamples.steps} email steps
+- The campaign example structure is a GUIDELINE and HINT for sequencing, not a strict template. Adapt it to match the draft requirements, ensuring a progressive story.
+- Create ${matchingExample.sequenceAndExamples.steps} email steps over ${matchingExample.sequenceAndExamples.duration} days, with delays in business days (first email delay: 0, immediately; subsequent delays based on progression).
 - Use the example progression as a hint: ${matchingExample.sequenceAndExamples.examples.join(' → ')}
 - Include personalization tokens: {{First Name}}, {{Company Name}}, {{Current Company}}
 - First email should have delay: 0 and delayUnit: "immediately"
 - Subsequent emails should have appropriate delays in "business days"
+- Strictly adhere to the specified email length of ${lengthSpec.range} READABLE WORDS (excluding HTML markup)
 - Make content professional and engaging
-- Strictly adhere to the specified email length of ${lengthSpec.range}
 - Incorporate the specified tone and target audience
 - Use the guideline structure but adapt content to the specific draft
-- Incorporate the additionalContext content verbatim where appropriate
+- Incorporate the additionalContext content verbatim where appropriate.
 - CRITICALLY IMPORTANT: Each email must have a clear call to action (CTA) formatted as an HTML link.
-- CRITICALLY IMPORTANT: Structure content for readability using proper HTML formatting with headings, paragraphs, and lists.
-- CRITICALLY IMPORTANT: Ensure the specified tone: ${draft.tone || 'professional'} influences both language and HTML styling.`;
-
+- CRITICALLY IMPORTANT: Structure content for readability using proper HTML formatting with headings, paragraphs, and lists. Use short paragraphs (2-3 sentences max) or bullet points for lists.
+- CRITICALLY IMPORTANT: Ensure the specified tone: ${draft.tone || 'professional'} influences both language and writing style..
+- CRITICALLY IMPORTANT: Generate minified HTML for the email content, removing all whitespace, line breaks, and comments. Use a single-line format with no indentation, ensuring all tags and attributes are preserved.
+- Incorporate company knowledge base data and additionalContext verbatim where appropriate, aligning with the tone and goal.`;
   const userPrompt = `Campaign Draft:
 ${JSON.stringify(draft, null, 2)}
 
@@ -489,7 +516,7 @@ CRITICAL: Format all emails with proper HTML markup, inline CSS, and responsive 
         }
       ],
       temperature: 0.7,
-      max_tokens: 5000
+      max_tokens: 2000
     });
 
     const response = completion.choices[0]?.message?.content;
