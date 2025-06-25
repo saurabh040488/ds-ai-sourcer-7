@@ -422,25 +422,6 @@ ADDITIONAL CONTEXT USAGE:
 - This content should inform and shape the email sequence while maintaining consistency with the source material's tone, style, and messaging
 - Integrate this content naturally into the emails while preserving its original details and nuances
 
-CRITICAL HTML EMAIL TEMPLATE STRUCTURE:
-Each email content should follow this structure:
-\`\`\`html
-<table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; line-height: 1.6;">
-  <tr>
-    <td style="padding: 20px;">
-      <h2 style="color: #333; font-size: 20px; margin: 0 0 15px 0;">Greeting</h2>
-      <p style="color: #555; font-size: 16px; margin: 0 0 15px 0;">Email content with proper formatting...</p>
-      <ul style="color: #555; font-size: 16px; margin: 15px 0; padding-left: 20px;">
-        <li style="margin-bottom: 8px;">Bullet point item</li>
-      </ul>
-      <p style="color: #555; font-size: 16px; margin: 15px 0;">
-        <a href="{{link}}" style="color: #0066cc; text-decoration: none; font-weight: bold;">Call to Action</a>
-      </p>
-      <p style="color: #555; font-size: 16px; margin: 15px 0 0 0;">Best regards,<br>{{Recruiter Name}}</p>
-    </td>
-  </tr>
-</table>
-\`\`\`
 
 RESPONSE FORMAT:
 Return a JSON object with:
