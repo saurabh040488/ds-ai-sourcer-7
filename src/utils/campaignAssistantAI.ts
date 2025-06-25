@@ -516,7 +516,7 @@ CRITICAL: Format all emails with proper HTML markup, inline CSS, and responsive 
         }
       ],
       temperature: 0.7,
-      max_tokens: 2000
+      max_tokens: 7000
     });
 
     const response = completion.choices[0]?.message?.content;
