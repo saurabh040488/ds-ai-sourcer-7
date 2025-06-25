@@ -38,6 +38,7 @@ export interface CampaignPrompt {
   emailLength?: 'short' | 'concise' | 'medium' | 'long';
   companyName: string;
   recruiterName: string;
+  enablePersonalization?: boolean;
 }
 
 export interface EmailStep {
@@ -109,6 +110,7 @@ Company: ${prompt.companyName}
 Recruiter: ${prompt.recruiterName}
 Tone: ${prompt.tone}
 Email Length: ${lengthSpec.range}
+Personalization: ${prompt.enablePersonalization ? 'Enabled' : 'Disabled'}
 
 ${collateralSection}
 
@@ -117,6 +119,21 @@ ${prompt.contentSources.join('\n')}
 
 Additional Instructions:
 ${prompt.aiInstructions}
+
+PERSONALIZATION INSTRUCTIONS:
+${prompt.enablePersonalization ? 
+`- This campaign WILL use per-candidate personalization
+- Include personalization tokens like {{First Name}}, {{Company Name}}, {{Current Company}}
+- Add personalization placeholders for candidate-specific content
+- Include a special section in each email marked with <!-- PERSONALIZATION_SECTION_START --> and <!-- PERSONALIZATION_SECTION_END --> comments
+- Within this section, write content that references the candidate's specific background, skills, or experience
+- Example: <!-- PERSONALIZATION_SECTION_START --><p style="color: #555; font-size: 16px; margin: 15px 0;">Your experience with {{Skill}} at {{Current Company}} would be valuable in our team.</p><!-- PERSONALIZATION_SECTION_END -->
+- These sections will be dynamically replaced with candidate-specific content` 
+: 
+`- This campaign will NOT use per-candidate personalization
+- Include only standard personalization tokens like {{First Name}}, {{Company Name}}, {{Current Company}}
+- Do not include any candidate-specific content sections or placeholders
+- All candidates will receive the same email content with only basic token replacements`}
 
 CRITICAL: Each email must be HTML-formatted with proper markup, including:
 - Responsive table-based layout
@@ -173,7 +190,8 @@ Generate a sequence of HTML emails that follow email design best practices.`;
         usage: completion.usage,
         campaignType: prompt.campaignType,
         emailLength: prompt.emailLength || 'concise',
-        collateralCount: relevantCompanyCollateral.length
+        collateralCount: relevantCompanyCollateral.length,
+        personalization: prompt.enablePersonalization ? 'Enabled' : 'Disabled'
       }
     );
 
@@ -260,7 +278,7 @@ Generate a sequence of HTML emails that follow email design best practices.`;
       }
       
       // Create HTML email template
-      return `<table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; line-height: 1.6;">
+      let emailContent = `<table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; line-height: 1.6;">
   <tr>
     <td style="padding: 20px;">
       <h2 style="color: #333; font-size: 20px; margin: 0 0 15px 0;">Hi {{First Name}},</h2>
@@ -292,8 +310,25 @@ Generate a sequence of HTML emails that follow email design best practices.`;
           <li style="margin-bottom: 8px;">${companyBenefits}</li>
         </ul>
       </div>
-      ` : ''}
+      ` : ''}`;
       
+      // Add personalization section if enabled
+      if (prompt.enablePersonalization) {
+        emailContent += `
+      <!-- PERSONALIZATION_SECTION_START -->
+      <p style="color: #555; font-size: 16px; margin: 15px 0;">
+        ${index === 0 ? 
+          `Your experience at <strong style="color: #333;">{{Current Company}}</strong> caught my attention, particularly your background in healthcare.` : 
+          index === 1 ? 
+          `Your skills in {{Skill}} would be valuable to our team at ${prompt.companyName}.` : 
+          `Your professional journey at {{Current Company}} shows the kind of expertise we're looking for.`
+        }
+      </p>
+      <!-- PERSONALIZATION_SECTION_END -->`;
+      }
+      
+      // Add call to action and signature
+      emailContent += `
       ${index === 0 ? `
       <p style="color: #555; font-size: 16px; margin: 15px 0;">
         Would you be interested in exploring opportunities with us?
@@ -325,6 +360,8 @@ Generate a sequence of HTML emails that follow email design best practices.`;
     </td>
   </tr>
 </table>`;
+      
+      return emailContent;
     };
     
     const fallbackSequence: EmailStep[] = [
@@ -421,5 +458,117 @@ export async function generateCampaignName(campaignType: string, targetAudience:
     const fallbackName = `${campaignType} Campaign`;
     console.log('🔄 Using fallback name:', fallbackName);
     return fallbackName;
+  }
+}
+
+// New function to generate personalized content for a specific candidate
+export async function generatePersonalizedContent(
+  emailContent: string,
+  candidate: {
+    name: string;
+    company: string;
+    skills: string[];
+    jobTitle?: string;
+    experience?: number;
+  }
+): Promise<string> {
+  console.log('🤖 Generating personalized content for candidate:', candidate.name);
+  
+  // Get AI configuration
+  const modelConfig = getAIModelForTask('campaignGeneration');
+  
+  const systemPrompt = `You are an expert at creating personalized email content for recruitment campaigns. 
+  
+Your task is to replace the personalization section in an email with highly personalized content based on the candidate's profile.
+
+INSTRUCTIONS:
+1. Analyze the email content and candidate profile
+2. Generate a personalized paragraph (30-50 words) that references the candidate's specific background, skills, or experience
+3. The content should be natural, specific, and compelling
+4. Return ONLY the personalized paragraph, no other text or explanation
+5. Format the content with proper HTML markup (inline styles, paragraph tags, etc.)
+6. Keep the same tone and style as the rest of the email
+
+CANDIDATE PROFILE:
+- Name: ${candidate.name}
+- Current Company: ${candidate.company}
+- Skills: ${candidate.skills.join(', ')}
+${candidate.jobTitle ? `- Job Title: ${candidate.jobTitle}` : ''}
+${candidate.experience ? `- Experience: ${candidate.experience} years` : ''}
+
+PERSONALIZATION GUIDELINES:
+- Reference the candidate's current company
+- Mention at least one specific skill from their profile
+- Connect their background to the opportunity
+- Use a warm, professional tone
+- Keep it concise but specific
+- Format as a single HTML paragraph with inline styles`;
+
+  const userPrompt = `Here is the email content with a personalization section to replace:
+
+${emailContent}
+
+Please generate a personalized paragraph to replace the content between <!-- PERSONALIZATION_SECTION_START --> and <!-- PERSONALIZATION_SECTION_END --> tags.`;
+
+  try {
+    console.log('📤 Sending personalization request to OpenAI...');
+    
+    const completion = await openai.chat.completions.create({
+      model: modelConfig.model,
+      messages: [
+        {
+          role: "system",
+          content: systemPrompt
+        },
+        {
+          role: "user",
+          content: userPrompt
+        }
+      ],
+      temperature: 0.7,
+      max_tokens: 200
+    });
+
+    const response = completion.choices[0]?.message?.content;
+    if (!response) {
+      throw new Error('No response from OpenAI');
+    }
+
+    console.log('📥 Personalized content generated');
+    
+    // Extract just the paragraph content
+    let personalizedContent = response.trim();
+    
+    // If the response includes HTML paragraph tags, use it directly
+    if (personalizedContent.includes('<p')) {
+      // It's already formatted
+    } else {
+      // Wrap in a styled paragraph
+      personalizedContent = `<p style="color: #555; font-size: 16px; margin: 15px 0; background-color: #f0f7ff; padding: 15px; border-left: 4px solid #0066cc; border-radius: 4px;">${personalizedContent}</p>`;
+    }
+    
+    // Replace the personalization section in the email
+    let updatedContent = emailContent;
+    
+    if (updatedContent.includes('<!-- PERSONALIZATION_SECTION_START -->') && updatedContent.includes('<!-- PERSONALIZATION_SECTION_END -->')) {
+      const startTag = '<!-- PERSONALIZATION_SECTION_START -->';
+      const endTag = '<!-- PERSONALIZATION_SECTION_END -->';
+      const startIndex = updatedContent.indexOf(startTag);
+      const endIndex = updatedContent.indexOf(endTag) + endTag.length;
+      
+      updatedContent = updatedContent.substring(0, startIndex) + 
+                       startTag + 
+                       personalizedContent + 
+                       endTag + 
+                       updatedContent.substring(endIndex);
+    }
+    
+    return updatedContent;
+    
+  } catch (error) {
+    logError('Personalization Generation', error, { candidateName: candidate.name });
+    
+    // Return the original content if there's an error
+    return emailContent;
   }
 }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Mail, Send, Eye, Plus, Trash2, Clock, User, Loader2, Save, Edit3, Copy, Play, EyeOff, X, Code, Type } from 'lucide-react';
+import { ArrowLeft, Mail, Send, Eye, Plus, Trash2, Clock, User, Loader2, Save, Edit3, Copy, Play, EyeOff, X, Code, Type, Wand2 } from 'lucide-react';
 import { type EmailStep } from '../utils/openai';
 import { AuthContext } from './AuthWrapper';
 import { Project, createCampaign, updateCampaign, Campaign } from '../lib/supabase';
@@ -31,12 +31,13 @@ const CampaignStepsEditor: React.FC<CampaignStepsEditorProps> = ({
   const [showPreview, setShowPreview] = useState(false);
   const [selectedTestCandidate, setSelectedTestCandidate] = useState('John Smith');
   const [viewMode, setViewMode] = useState<'html' | 'preview'>('html');
+  const [isGeneratingPersonalization, setIsGeneratingPersonalization] = useState(false);
 
   const testCandidates = [
-    { name: 'John Smith', company: 'Memorial Healthcare' },
-    { name: 'Sarah Johnson', company: 'Baptist Health' },
-    { name: 'Michael Brown', company: 'Jackson Health System' },
-    { name: 'Emily Davis', company: 'Cleveland Clinic' }
+    { name: 'John Smith', company: 'Memorial Healthcare', skills: ['Critical Care', 'Emergency Response', 'Patient Assessment'] },
+    { name: 'Sarah Johnson', company: 'Baptist Health', skills: ['Pediatric Care', 'Family Education', 'Child Development'] },
+    { name: 'Michael Brown', company: 'Jackson Health System', skills: ['Surgical Procedures', 'Operating Room Protocols', 'Sterile Technique'] },
+    { name: 'Emily Davis', company: 'Cleveland Clinic', skills: ['Cardiac Care', 'EKG Interpretation', 'Heart Failure Management'] }
   ];
 
   const updateEmailStep = (stepId: string, field: keyof EmailStep, value: any) => {
@@ -70,7 +71,7 @@ const CampaignStepsEditor: React.FC<CampaignStepsEditorProps> = ({
       </ul>
       
       <p style="color: #555; font-size: 16px; margin: 15px 0;">
-        Would you be available for a brief call this week to discuss? 
+        Would you be available for a brief call this week? 
         <a href="#" style="color: #0066cc; text-decoration: none; font-weight: bold;">Schedule a conversation</a>
       </p>
       
@@ -193,7 +194,9 @@ const CampaignStepsEditor: React.FC<CampaignStepsEditorProps> = ({
         tone: campaignData.tone,
         company_name: campaignData.companyName.trim(),
         recruiter_name: campaignData.recruiterName.trim(),
-        settings: {},
+        settings: {
+          enablePersonalization: campaignData.enablePersonalization || false
+        },
         stats: { sent: 0, opened: 0, replied: 0 }
       };
 
@@ -301,11 +304,74 @@ const CampaignStepsEditor: React.FC<CampaignStepsEditorProps> = ({
   <p style="color: #777; font-size: 14px; margin-top: 5px;">Caption text</p>
 </div>`;
         break;
+      case 'personalization':
+        template = `<!-- PERSONALIZATION_SECTION_START -->
+<p style="color: #555; font-size: 16px; margin: 15px 0;">
+  Your experience with {{Skill}} at {{Current Company}} would be valuable in our team.
+</p>
+<!-- PERSONALIZATION_SECTION_END -->`;
+        break;
       default:
         return;
     }
     
     updateEmailStep(activeStep.id, 'content', activeStep.content + template);
+  };
+
+  const generatePersonalizedPreview = async () => {
+    if (!activeStep || !selectedTestCandidate) return;
+    
+    setIsGeneratingPersonalization(true);
+    
+    try {
+      // In a real implementation, this would be an API call to generate personalized content
+      // For now, we'll simulate a delay and return a hardcoded personalized section
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      const selectedCandidate = testCandidates.find(c => c.name === selectedTestCandidate);
+      if (!selectedCandidate) {
+        throw new Error('Selected candidate not found');
+      }
+      
+      // Generate personalized content based on candidate data
+      const personalizationContent = `<p style="color: #555; font-size: 16px; margin: 15px 0; background-color: #f0f7ff; padding: 15px; border-left: 4px solid #0066cc; border-radius: 4px;">
+  I noticed your impressive experience at <strong style="color: #333;">${selectedCandidate.company}</strong>, particularly your expertise in <strong style="color: #333;">${selectedCandidate.skills[0]}</strong> and <strong style="color: #333;">${selectedCandidate.skills[1]}</strong>. These skills are exactly what we're looking for in our team.
+</p>`;
+      
+      // Replace the personalization section in the email content
+      let updatedContent = activeStep.content;
+      
+      if (updatedContent.includes('<!-- PERSONALIZATION_SECTION_START -->') && updatedContent.includes('<!-- PERSONALIZATION_SECTION_END -->')) {
+        const startTag = '<!-- PERSONALIZATION_SECTION_START -->';
+        const endTag = '<!-- PERSONALIZATION_SECTION_END -->';
+        const startIndex = updatedContent.indexOf(startTag);
+        const endIndex = updatedContent.indexOf(endTag) + endTag.length;
+        
+        updatedContent = updatedContent.substring(0, startIndex) + 
+                         startTag + 
+                         personalizationContent + 
+                         endTag + 
+                         updatedContent.substring(endIndex);
+      } else {
+        // If no personalization section exists, add one before the signature
+        const signatureIndex = updatedContent.lastIndexOf('<p style="color: #555; font-size: 16px; margin: 15px 0 0 0;">');
+        if (signatureIndex !== -1) {
+          updatedContent = updatedContent.substring(0, signatureIndex) + 
+                          `<!-- PERSONALIZATION_SECTION_START -->${personalizationContent}<!-- PERSONALIZATION_SECTION_END -->\n` + 
+                          updatedContent.substring(signatureIndex);
+        }
+      }
+      
+      // Update the email step with the personalized content for preview
+      setViewMode('preview');
+      updateEmailStep(activeStep.id, 'content', updatedContent);
+      
+    } catch (error) {
+      console.error('Error generating personalized preview:', error);
+      setSaveError('Failed to generate personalized preview');
+    } finally {
+      setIsGeneratingPersonalization(false);
+    }
   };
 
   const activeStep = emailSteps.find(step => step.id === activeStepId);
@@ -317,7 +383,8 @@ const CampaignStepsEditor: React.FC<CampaignStepsEditorProps> = ({
       .replace(/\{\{First Name\}\}/g, selectedCandidate.name.split(' ')[0])
       .replace(/\{\{Current Company\}\}/g, selectedCandidate.company)
       .replace(/\{\{Company Name\}\}/g, campaignData.companyName)
-      .replace(/\{\{Your Name\}\}/g, campaignData.recruiterName);
+      .replace(/\{\{Your Name\}\}/g, campaignData.recruiterName)
+      .replace(/\{\{Skill\}\}/g, selectedCandidate.skills[0] || 'healthcare');
 
     return processedContent;
   };
@@ -328,6 +395,11 @@ const CampaignStepsEditor: React.FC<CampaignStepsEditorProps> = ({
       .replace(/\{\{Current Company\}\}/g, selectedCandidate.company)
       .replace(/\{\{Company Name\}\}/g, campaignData.companyName)
       .replace(/\{\{Your Name\}\}/g, campaignData.recruiterName);
+  };
+
+  const hasPersonalizationSection = (content: string) => {
+    return content.includes('<!-- PERSONALIZATION_SECTION_START -->') && 
+           content.includes('<!-- PERSONALIZATION_SECTION_END -->');
   };
 
   return (
@@ -401,6 +473,13 @@ const CampaignStepsEditor: React.FC<CampaignStepsEditorProps> = ({
               </button>
             </div>
             <p className="text-sm text-gray-600">{emailSteps.length} steps configured</p>
+            
+            {/* Personalization Status */}
+            <div className="mt-2 text-xs">
+              <span className={`px-2 py-1 rounded-full ${campaignData.enablePersonalization ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                {campaignData.enablePersonalization ? 'Personalization: Enabled' : 'Personalization: Disabled'}
+              </span>
+            </div>
           </div>
           
           <div className="flex-1 overflow-y-auto p-2">
@@ -470,6 +549,14 @@ const CampaignStepsEditor: React.FC<CampaignStepsEditorProps> = ({
                         `Send after ${step.delay} ${step.delayUnit}`
                       )}
                     </div>
+                    
+                    {/* Personalization indicator */}
+                    {campaignData.enablePersonalization && hasPersonalizationSection(step.content) && (
+                      <div className="mt-1 text-xs text-green-600 flex items-center gap-1">
+                        <User className="w-3 h-3" />
+                        <span>Includes personalization</span>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -577,6 +664,14 @@ const CampaignStepsEditor: React.FC<CampaignStepsEditorProps> = ({
                             >
                               + Your Name
                             </button>
+                            {campaignData.enablePersonalization && (
+                              <button 
+                                onClick={() => insertPersonalizationToken('Skill')}
+                                className="px-2 py-1 text-xs text-green-600 hover:bg-green-50 rounded"
+                              >
+                                + Skill
+                              </button>
+                            )}
                           </div>
                         </div>
                         
@@ -628,6 +723,14 @@ const CampaignStepsEditor: React.FC<CampaignStepsEditorProps> = ({
                             >
                               Image
                             </button>
+                            {campaignData.enablePersonalization && (
+                              <button 
+                                onClick={() => insertHTMLTemplate('personalization')}
+                                className="px-2 py-1 text-xs bg-green-100 text-green-700 hover:bg-green-200 rounded"
+                              >
+                                Personalization Section
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -686,17 +789,34 @@ const CampaignStepsEditor: React.FC<CampaignStepsEditorProps> = ({
                     <Eye className="w-4 h-4" />
                     Email Preview
                   </h4>
-                  <select 
-                    value={selectedTestCandidate}
-                    onChange={(e) => setSelectedTestCandidate(e.target.value)}
-                    className="px-3 py-1 text-sm border border-gray-300 rounded"
-                  >
-                    {testCandidates.map(candidate => (
-                      <option key={candidate.name} value={candidate.name}>
-                        {candidate.name} - {candidate.company}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex items-center gap-2">
+                    <select 
+                      value={selectedTestCandidate}
+                      onChange={(e) => setSelectedTestCandidate(e.target.value)}
+                      className="px-3 py-1 text-sm border border-gray-300 rounded"
+                    >
+                      {testCandidates.map(candidate => (
+                        <option key={candidate.name} value={candidate.name}>
+                          {candidate.name} - {candidate.company}
+                        </option>
+                      ))}
+                    </select>
+                    
+                    {campaignData.enablePersonalization && (
+                      <button
+                        onClick={generatePersonalizedPreview}
+                        disabled={isGeneratingPersonalization}
+                        className="flex items-center gap-1 px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isGeneratingPersonalization ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Wand2 className="w-3 h-3" />
+                        )}
+                        {isGeneratingPersonalization ? 'Generating...' : 'Test AI Personalization'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
               

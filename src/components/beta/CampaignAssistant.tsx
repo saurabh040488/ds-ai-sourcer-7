@@ -28,9 +28,10 @@ const CampaignAssistant: React.FC<CampaignAssistantProps> = ({
   const [campaignDraft, setCampaignDraft] = useState<Partial<CampaignDraft>>({
     companyName: 'HCA Healthcare',
     recruiterName: user?.full_name || 'Sarah Johnson',
-    emailLength: 'concise' // Default to concise (60-80 words)
+    emailLength: 'concise', // Default to concise (60-80 words)
+    enablePersonalization: false // Default to no personalization
   });
-  const [currentStep, setCurrentStep] = useState<'goal' | 'audience' | 'tone' | 'context' | 'review' | 'generate'>('goal');
+  const [currentStep, setCurrentStep] = useState<'goal' | 'audience' | 'tone' | 'context' | 'personalization' | 'review' | 'generate'>('goal');
   
   // Company branding state
   const [companyProfiles, setCompanyProfiles] = useState<CompanyProfile[]>([]);
@@ -320,6 +321,8 @@ What's the main goal for your campaign?`,
 
 ${relevantCompanyCollateral.length > 0 ? `I've incorporated ${relevantCompanyCollateral.length} pieces of company collateral from your knowledge base to make the campaign more personalized and effective.` : ''}
 
+${finalDraft.enablePersonalization ? 'Personalization is enabled for this campaign. Each email will be customized based on the candidate\'s profile data.' : 'Personalization is disabled for this campaign. All candidates will receive the same email content.'}
+
 You'll now be taken to the campaign editor where you can review and customize each email before launching.`,
         timestamp: new Date()
       };
@@ -353,6 +356,7 @@ You'll now be taken to the campaign editor where you can review and customize ea
       audience: Users,
       tone: Palette,
       context: FileText,
+      personalization: User,
       review: CheckCircle,
       generate: Sparkles
     };
@@ -365,13 +369,14 @@ You'll now be taken to the campaign editor where you can review and customize ea
       audience: 'Target Audience',
       tone: 'Tone & Length',
       context: 'Additional Context',
+      personalization: 'Personalization',
       review: 'Review & Confirm',
       generate: 'Generate Campaign'
     };
     return labels[step as keyof typeof labels] || 'Unknown';
   };
 
-  const progressSteps = ['goal', 'audience', 'tone', 'context', 'review'];
+  const progressSteps = ['goal', 'audience', 'tone', 'context', 'personalization', 'review'];
   const currentStepIndex = progressSteps.indexOf(currentStep);
   const selectedProfile = companyProfiles.find(p => p.id === selectedCompanyProfileId);
 
@@ -581,6 +586,14 @@ You'll now be taken to the campaign editor where you can review and customize ea
                           <div>
                             <span className="font-medium text-purple-700">Type:</span>
                             <span className="text-purple-600 ml-2">{message.campaignDraft.type}</span>
+                          </div>
+                        )}
+                        {typeof message.campaignDraft.enablePersonalization !== 'undefined' && (
+                          <div>
+                            <span className="font-medium text-purple-700">Personalization:</span>
+                            <span className="text-purple-600 ml-2">
+                              {message.campaignDraft.enablePersonalization ? 'Enabled' : 'Disabled'}
+                            </span>
                           </div>
                         )}
                         

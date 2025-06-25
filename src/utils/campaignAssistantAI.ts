@@ -15,7 +15,7 @@ interface AssistantResponse {
   message: string;
   suggestions?: string[];
   campaignDraft?: Partial<CampaignDraft>;
-  nextStep?: 'goal' | 'audience' | 'tone' | 'context' | 'review' | 'generate';
+  nextStep?: 'goal' | 'audience' | 'tone' | 'context' | 'personalization' | 'review' | 'generate';
   isComplete?: boolean;
 }
 
@@ -63,7 +63,8 @@ CONVERSATION FLOW:
 2. Audience Definition: Gather details about target audience (prioritize recent searches for suggestions)
 3. Tone Selection: Determine appropriate communication tone
 4. Additional Context: Collect any specific requirements or context
-5. Review & Generate: Confirm details and proceed to generation
+5. Personalization Preference: Ask user about per-candidate personalization
+6. Review & Generate: Confirm details and proceed to generation
 
 CRITICAL FLOW RULE:
 - Once the user provides a campaign goal and a matchedExampleId is determined and set in the campaignDraft, the nextStep should automatically transition to 'audience'
@@ -98,6 +99,13 @@ ADDITIONAL CONTEXT STEP SPECIFIC INSTRUCTIONS:
 - Your role is to accept this content as-is and pass it through unchanged to maintain authenticity and ensure all original details are preserved
 - Do NOT provide any interpretation or summary of what the content contains - simply acknowledge receipt and move to the next step
 
+PERSONALIZATION PREFERENCE STEP SPECIFIC INSTRUCTIONS:
+- When in the 'personalization' step, ask the user if they want to enable per-candidate personalization for the campaign.
+- Provide suggestions for enabling or disabling personalization (e.g., "Yes, enable personalization", "No, use general content").
+- If the user confirms enabling personalization, set \`campaignDraft.enablePersonalization\` to \`true\`.
+- If the user confirms disabling personalization or indicates general content, set \`campaignDraft.enablePersonalization\` to \`false\`.
+- Automatically transition to the 'review' step once this preference is set.
+
 COMPANY BRANDING INTEGRATION:
 - The user has selected a company profile that contains branding information and collateral
 - This company information will be used to personalize the campaign
@@ -116,9 +124,10 @@ Always respond with a JSON object containing:
     "type": "campaign-type-from-matched-example",
     "emailLength": "short|concise|medium|long",
     "additionalContext": "VERBATIM user input when in context step - NO MODIFICATIONS",
+    "enablePersonalization": true | false, // New field for personalization preference
     ...other draft fields
   },
-  "nextStep": "goal|audience|tone|context|review|generate",
+  "nextStep": "goal|audience|tone|context|personalization|review|generate",
   "isComplete": false
 }
 
@@ -138,6 +147,7 @@ GUIDELINES:
 - CRITICAL: Accept any target audience input from the user and proceed to the next step without asking for clarification
 - CRITICAL: For tone step, include email length preference collection
 - CRITICAL: For context step, preserve user input EXACTLY as provided in additionalContext field without any modifications
+- CRITICAL: For personalization step, ask about per-candidate personalization and set \`enablePersonalization\` in \`campaignDraft\`.
 
 Current conversation context: The user is ${getConversationStage(currentDraft)}`;
 
@@ -196,6 +206,7 @@ Please process this input, classify against available campaign examples, and pro
       suggestions: parsedResponse.suggestions || [],
       campaignDraft: { 
         emailLength: 'concise', // Default email length
+        enablePersonalization: false, // Default personalization setting
         ...currentDraft, 
         ...parsedResponse.campaignDraft 
       },
@@ -294,12 +305,39 @@ Please process this input, classify against available campaign examples, and pro
 
     // CRITICAL: Handle additional context input - preserve verbatim
     if (currentDraft.targetAudience && currentDraft.tone && !currentDraft.additionalContext && userInput.trim().length > 10) {
-      console.log('📝 Detected additional context input, preserving verbatim and proceeding to review step');
+      console.log('📝 Detected additional context input, preserving verbatim and proceeding to personalization step');
       
       // Store the user input EXACTLY as provided without any modifications
       result.campaignDraft.additionalContext = userInput;
+      result.nextStep = 'personalization';
+      result.message = `Perfect! I've captured your additional context exactly as provided. Now, would you like to enable personalization for each candidate? This will customize the email content based on each candidate's profile data.`;
+      result.suggestions = [
+        "Yes, enable personalization",
+        "No, use general content for all candidates"
+      ];
+    }
+
+    // Handle personalization preference input
+    if (currentDraft.additionalContext && result.nextStep === 'personalization' && userInput.trim().length > 0) {
+      console.log('🎯 Detected personalization preference input');
+      
+      const inputLower = userInput.toLowerCase();
+      const isEnablingPersonalization = 
+        inputLower.includes('yes') || 
+        inputLower.includes('enable') || 
+        inputLower.includes('personalization') || 
+        inputLower.includes('customize') || 
+        inputLower.includes('personalize');
+      
+      result.campaignDraft.enablePersonalization = isEnablingPersonalization;
       result.nextStep = 'review';
-      result.message = `Perfect! I've captured your additional context exactly as provided. Your campaign is now ready for generation. Let me review the details with you before we proceed.`;
+      
+      if (isEnablingPersonalization) {
+        result.message = `Great! I've enabled personalization for your campaign. Each email will be customized based on the candidate's profile data. Your campaign is now ready for generation. Let me review the details with you before we proceed.`;
+      } else {
+        result.message = `Understood. I've disabled personalization for your campaign. All candidates will receive the same email content. Your campaign is now ready for generation. Let me review the details with you before we proceed.`;
+      }
+      
       result.suggestions = [
         "Generate the campaign now",
         "Let me review the details first",
@@ -405,7 +443,7 @@ CRITICAL WORD COUNT REQUIREMENTS:
 IMPORTANT: Word count refers to READABLE TEXT ONLY, not HTML markup
 - Count only the words that appear when the email is rendered/displayed to the user
 - HTML tags, CSS styles, and markup do not count toward word limits
-- Target length: {lengthSpec.range} ({lengthSpec.description}) of READABLE CONTENT
+- Target length: ${lengthSpec.range} (${lengthSpec.description}) of READABLE CONTENT
 - Example: "<p>Hello world</p>" counts as 2 words, not 4
 - Example: "<strong>Important message</strong>" counts as 2 words, not 3
 
@@ -415,7 +453,7 @@ CRITICAL TONE REQUIREMENTS
   - **Friendly**: Use warm, conversational language, start with 'Hey {{First Name}}!' or 'Hi {{First Name}},', end with 'Best, {{Recruiter Name}}.' Use short sentences, supportive phrases (e.g., 'We're excited to help!'), and an approachable style.
   - **Casual**: Use informal language with slang or contractions, start with 'Hey {{First Name}}' or 'What's up, {{First Name}}?', end with 'Cheers, {{Recruiter Name}}.' Use short, punchy sentences and a playful, relatable tone.
   - **Formal**: Use precise, sophisticated language, start with 'Dear {{First Name}}' or 'To {{First Name}},', end with 'Yours sincerely, {{Recruiter Name}}.' Avoid contractions, use a respectful, distant voice, and structured paragraphs.
-- CRITICAL: Each email must contain approximately {lengthSpec.range} words of READABLE TEXT (excluding HTML markup), structured for readability with short paragraphs or bullet points. This is a strict requirement.
+- CRITICAL: Each email must contain approximately ${lengthSpec.range} words of READABLE TEXT (excluding HTML markup), structured for readability with short paragraphs or bullet points. This is a strict requirement.
 
 
 EMAIL LENGTH REQUIREMENTS:
@@ -442,10 +480,46 @@ ADDITIONAL CONTEXT USAGE:
 - This content should inform and shape the email sequence while maintaining consistency with the source material's tone, style, and messaging
 - Integrate this content naturally into the emails while preserving its original details and nuances
 
+PERSONALIZATION INSTRUCTIONS:
+${draft.enablePersonalization ? 
+`- This campaign WILL use per-candidate personalization
+- Include personalization tokens like {{First Name}}, {{Company Name}}, {{Current Company}}
+- Add personalization placeholders for candidate-specific content
+- Include a special section in each email marked with <!-- PERSONALIZATION_SECTION_START --> and <!-- PERSONALIZATION_SECTION_END --> comments
+- Within this section, write content that references the candidate's specific background, skills, or experience
+- Example: <!-- PERSONALIZATION_SECTION_START --><p style="color: #555; font-size: 16px; margin: 15px 0;">Your experience with {{Skill}} at {{Current Company}} would be valuable in our team.</p><!-- PERSONALIZATION_SECTION_END -->
+- These sections will be dynamically replaced with candidate-specific content` 
+: 
+`- This campaign will NOT use per-candidate personalization
+- Include only standard personalization tokens like {{First Name}}, {{Company Name}}, {{Current Company}}
+- Do not include any candidate-specific content sections or placeholders
+- All candidates will receive the same email content with only basic token replacements`}
+
 CRITICAL HTML EMAIL TEMPLATE STRUCTURE:
 Each email content should follow this structure:
 \`\`\`html
-<!DOCTYPE html><html><head><meta charset="UTF-8" name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0; font-family:Arial, sans-serif; background:#f4f4f4;"><table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px; margin:0 auto; background:#fff;"><tr><td style="padding:20px;"><h2 style="color:#333; font-size:18px; margin:0 0 10px;">Hi {{First Name}},</h2><p style="color:#555; font-size:14px; margin:0 0 15px;">[Main content]</p><a href="{{CTA_Link}}" style="display:inline-block; background:#0066cc; color:#fff; padding:10px 20px; text-decoration:none; border-radius:5px;">[CTA Text]</a><p style="color:#888; font-size:12px; margin:15px 0 0;">{{Recruiter Name}}, {{Company Name}} | <a href="{{Unsubscribe_Link}}" style="color:#0066cc;">Unsubscribe</a></p></td></tr></table></body></html>
+<table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; line-height: 1.6;">
+  <tr>
+    <td style="padding: 20px;">
+      <h2 style="color: #333; font-size: 20px; margin: 0 0 15px 0;">Hello {{First Name}},</h2>
+
+      <p style="color: #555; font-size: 16px; margin: 0 0 15px 0;">
+        [Main email content here]
+      </p>
+
+      <p style="color: #555; font-size: 16px; margin: 15px 0;">
+        [Call to action here]
+        <a href="#" style="color: #0066cc; text-decoration: none; font-weight: bold;">Click here</a>
+      </p>
+
+      <p style="color: #555; font-size: 16px; margin: 15px 0 0 0;">
+        Best regards,<br>
+        <strong style="color: #333;">{{Recruiter Name}}</strong><br>
+        {{Company Name}}
+      </p>
+    </td>
+  </tr>
+</table>
 \`\`\`
 
 RESPONSE FORMAT:
@@ -461,7 +535,8 @@ Return a JSON object with:
     "companyName": "company name",
     "recruiterName": "recruiter name",
     "contentSources": ["array of content sources"],
-    "aiInstructions": "additional context"
+    "aiInstructions": "additional context",
+    "enablePersonalization": true | false
   },
   "emailSteps": [
     {
@@ -491,6 +566,7 @@ IMPORTANT:
 - CRITICALLY IMPORTANT: Ensure the specified tone: ${draft.tone || 'professional'} influences both language and writing style..
 - CRITICALLY IMPORTANT: Generate minified HTML for the email content, removing all whitespace, line breaks, and comments. Use a single-line format with no indentation, ensuring all tags and attributes are preserved.
 - Incorporate company knowledge base data and additionalContext verbatim where appropriate, aligning with the tone and goal.`;
+
   const userPrompt = `Campaign Draft:
 ${JSON.stringify(draft, null, 2)}
 
@@ -498,7 +574,8 @@ Generate the complete campaign with HTML-formatted email sequence using the guid
 CRITICAL: Each email must be ${lengthSpec.range} in length with a ${draft.tone || 'professional'} tone.
 CRITICAL: Use the additionalContext content exactly as provided without any modifications.
 CRITICAL: Integrate the company collateral naturally into the emails where appropriate.
-CRITICAL: Format all emails with proper HTML markup, inline CSS, and responsive design.`;
+CRITICAL: Format all emails with proper HTML markup, inline CSS, and responsive design.
+${draft.enablePersonalization ? 'CRITICAL: Include personalization sections as specified in the instructions.' : 'CRITICAL: Do not include personalization sections as specified in the instructions.'}`;
 
   try {
     console.log('📤 Sending campaign generation request...');
@@ -547,7 +624,8 @@ CRITICAL: Format all emails with proper HTML markup, inline CSS, and responsive 
     return {
       campaignData: {
         ...result.campaignData,
-        emailLength: draft.emailLength || 'concise' // Ensure emailLength is included
+        emailLength: draft.emailLength || 'concise', // Ensure emailLength is included
+        enablePersonalization: draft.enablePersonalization || false // Ensure personalization preference is included
       },
       emailSteps
     };
@@ -565,6 +643,7 @@ function getConversationStage(draft: Partial<CampaignDraft>): string {
   if (!draft.targetAudience) return 'defining their target audience';
   if (!draft.tone) return 'selecting the campaign tone and email length';
   if (!draft.additionalContext) return 'providing additional context';
+  if (draft.additionalContext && typeof draft.enablePersonalization === 'undefined') return 'choosing personalization preferences';
   return 'reviewing their campaign details';
 }
 
@@ -573,6 +652,7 @@ function determineNextStep(draft: Partial<CampaignDraft>): AssistantResponse['ne
   if (!draft.targetAudience) return 'audience';
   if (!draft.tone) return 'tone';
   if (!draft.additionalContext) return 'context';
+  if (draft.additionalContext && typeof draft.enablePersonalization === 'undefined') return 'personalization';
   return 'review';
 }
 
@@ -620,6 +700,13 @@ function createFallbackResponse(userInput: string, currentDraft: Partial<Campaig
         "Focus on career development opportunities",
         "Highlight work-life balance",
         "Emphasize competitive compensation"
+      ]
+    },
+    personalization: {
+      message: "Would you like to enable personalization for each candidate? This will customize the email content based on each candidate's profile data.",
+      suggestions: [
+        "Yes, enable personalization",
+        "No, use general content for all candidates"
       ]
     },
     review: {
@@ -673,7 +760,8 @@ function createFallbackCampaign(
     companyName: draft.companyName,
     recruiterName: draft.recruiterName,
     contentSources: example.collateralToUse,
-    aiInstructions: draft.additionalContext
+    aiInstructions: draft.additionalContext,
+    enablePersonalization: draft.enablePersonalization || false
   };
 
   // Extract company information from collateral
@@ -717,7 +805,7 @@ function createFallbackCampaign(
   // Create HTML email template for each step
   const createEmailContent = (index: number, title: string): string => {
     // Base HTML template with responsive design
-    return `<table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; line-height: 1.6;">
+    let emailContent = `<table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; line-height: 1.6;">
   <tr>
     <td style="padding: 20px;">
       <h2 style="color: #333; font-size: 20px; margin: 0 0 15px 0;">Hi {{First Name}},</h2>
@@ -749,8 +837,25 @@ function createFallbackCampaign(
           <li style="margin-bottom: 8px;">${companyBenefits}</li>
         </ul>
       </div>
-      ` : ''}
+      ` : ''}`;
+
+    // Add personalization section if enabled
+    if (draft.enablePersonalization) {
+      emailContent += `
+      <!-- PERSONALIZATION_SECTION_START -->
+      <p style="color: #555; font-size: 16px; margin: 15px 0;">
+        ${index === 0 ? 
+          `Your experience at <strong style="color: #333;">{{Current Company}}</strong> caught my attention, particularly your background in healthcare.` : 
+          index === 1 ? 
+          `Your skills in {{Skill}} would be valuable to our team at ${draft.companyName}.` : 
+          `Your professional journey at {{Current Company}} shows the kind of expertise we're looking for.`
+        }
+      </p>
+      <!-- PERSONALIZATION_SECTION_END -->`;
+    }
       
+    // Add call to action and signature
+    emailContent += `
       ${index === 0 ? `
       <p style="color: #555; font-size: 16px; margin: 15px 0;">
         Would you be interested in exploring opportunities with us?
@@ -782,6 +887,8 @@ function createFallbackCampaign(
     </td>
   </tr>
 </table>`;
+
+    return emailContent;
   };
 
   const emailSteps: EmailStep[] = example.sequenceAndExamples.examples.map((exampleTitle, index) => ({

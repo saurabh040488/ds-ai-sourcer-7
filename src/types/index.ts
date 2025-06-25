@@ -143,4 +143,5 @@ export interface CampaignDraft {
   };
   matchedExampleId?: string; // ID of the matched CampaignExample
   relevantCompanyCollateral?: CompanyCollateral[]; // Actual collateral data relevant to the campaign
+  enablePersonalization?: boolean; // Whether to enable per-candidate personalization
 }
