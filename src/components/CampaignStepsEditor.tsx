@@ -35,6 +35,10 @@ const CampaignStepsEditor: React.FC<CampaignStepsEditorProps> = ({
   const [isGeneratingPersonalization, setIsGeneratingPersonalization] = useState(false);
   const [renderedPreviewHtml, setRenderedPreviewHtml] = useState<string>('');
 
+  // Initialize activeStep safely
+  let activeStep: EmailStep | undefined = undefined;
+  activeStep = emailSteps.find(step => step.id === activeStepId);
+
   const testCandidates = [
     { name: 'John Smith', company: 'Memorial Healthcare', skills: ['Critical Care', 'Emergency Response', 'Patient Assessment'] },
     { name: 'Sarah Johnson', company: 'Baptist Health', skills: ['Pediatric Care', 'Family Education', 'Child Development'] },
@@ -334,6 +338,7 @@ const CampaignStepsEditor: React.FC<CampaignStepsEditorProps> = ({
   };
 
   const renderPreviewSubject = (subject: string) => {
+    const selectedCandidate = testCandidates.find(c => c.name === selectedTestCandidate) || testCandidates[0];
     return subject
       .replace(/\{\{First Name\}\}/g, selectedCandidate.name.split(' ')[0])
       .replace(/\{\{Current Company\}\}/g, selectedCandidate.company)
@@ -390,7 +395,6 @@ const CampaignStepsEditor: React.FC<CampaignStepsEditorProps> = ({
     }
   }, [activeStep, selectedTestCandidate]);
 
-  const activeStep = emailSteps.find(step => step.id === activeStepId);
   const selectedCandidate = testCandidates.find(c => c.name === selectedTestCandidate) || testCandidates[0];
 
   return (
