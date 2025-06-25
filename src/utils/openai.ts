@@ -461,7 +461,7 @@ export async function generateCampaignName(campaignType: string, targetAudience:
   }
 }
 
-// New function to generate personalized content for a specific candidate
+// Function to generate personalized content for a specific candidate
 export async function generatePersonalizedContent(
   emailContent: string,
   candidate: {
@@ -474,20 +474,28 @@ export async function generatePersonalizedContent(
 ): Promise<string> {
   console.log('🤖 Generating personalized content for candidate:', candidate.name);
   
+  // Check if the email has a personalization section
+  if (!emailContent.includes('<!-- PERSONALIZATION_SECTION_START -->') || 
+      !emailContent.includes('<!-- PERSONALIZATION_SECTION_END -->')) {
+    console.log('⚠️ No personalization section found in email template');
+    // Just apply basic token replacement and return
+    return applyTokenReplacement(emailContent, candidate);
+  }
+  
   // Get AI configuration
   const modelConfig = getAIModelForTask('campaignGeneration');
   
   const systemPrompt = `You are an expert at creating personalized email content for recruitment campaigns. 
   
-Your task is to replace the personalization section in an email with highly personalized content based on the candidate's profile.
+Your task is to generate a personalized paragraph that will replace the content between the personalization section markers in an email.
 
 INSTRUCTIONS:
-1. Analyze the email content and candidate profile
+1. Analyze the candidate profile
 2. Generate a personalized paragraph (30-50 words) that references the candidate's specific background, skills, or experience
 3. The content should be natural, specific, and compelling
 4. Return ONLY the personalized paragraph, no other text or explanation
 5. Format the content with proper HTML markup (inline styles, paragraph tags, etc.)
-6. Keep the same tone and style as the rest of the email
+6. Use a professional, warm tone
 
 CANDIDATE PROFILE:
 - Name: ${candidate.name}
@@ -502,13 +510,18 @@ PERSONALIZATION GUIDELINES:
 - Connect their background to the opportunity
 - Use a warm, professional tone
 - Keep it concise but specific
-- Format as a single HTML paragraph with inline styles`;
+- Format as a single HTML paragraph with inline styles
 
-  const userPrompt = `Here is the email content with a personalization section to replace:
+IMPORTANT: Return ONLY the personalized paragraph content, nothing else. No explanations, no markdown, no additional text.`;
 
-${emailContent}
+  const userPrompt = `Please generate a personalized paragraph for ${candidate.name} who works at ${candidate.company} with skills in ${candidate.skills.join(', ')}.
 
-Please generate a personalized paragraph to replace the content between <!-- PERSONALIZATION_SECTION_START --> and <!-- PERSONALIZATION_SECTION_END --> tags.`;
+The paragraph should be formatted with HTML and will be placed in the personalization section of an email.
+
+Example format:
+<p style="color: #555; font-size: 16px; margin: 15px 0; background-color: #f0f7ff; padding: 15px; border-left: 4px solid #0066cc; border-radius: 4px;">
+  I noticed your impressive experience at [Company], particularly your expertise in [Skill]. These skills are exactly what we're looking for in our team.
+</p>`;
 
   try {
     console.log('📤 Sending personalization request to OpenAI...');
@@ -540,9 +553,7 @@ Please generate a personalized paragraph to replace the content between <!-- PER
     let personalizedContent = response.trim();
     
     // If the response includes HTML paragraph tags, use it directly
-    if (personalizedContent.includes('<p')) {
-      // It's already formatted
-    } else {
+    if (!personalizedContent.includes('<p')) {
       // Wrap in a styled paragraph
       personalizedContent = `<p style="color: #555; font-size: 16px; margin: 15px 0; background-color: #f0f7ff; padding: 15px; border-left: 4px solid #0066cc; border-radius: 4px;">${personalizedContent}</p>`;
     }
@@ -558,17 +569,28 @@ Please generate a personalized paragraph to replace the content between <!-- PER
       
       updatedContent = updatedContent.substring(0, startIndex) + 
                        startTag + 
-                       personalizedContent + 
+                       '\n' + personalizedContent + '\n' + 
                        endTag + 
                        updatedContent.substring(endIndex);
     }
     
-    return updatedContent;
+    // Apply token replacement to the entire email
+    return applyTokenReplacement(updatedContent, candidate);
     
   } catch (error) {
     logError('Personalization Generation', error, { candidateName: candidate.name });
     
-    // Return the original content if there's an error
-    return emailContent;
+    // Apply basic token replacement and return the original content if there's an error
+    return applyTokenReplacement(emailContent, candidate);
   }
+}
+
+// Helper function to apply token replacement throughout the email
+function applyTokenReplacement(content: string, candidate: { name: string; company: string; skills: string[] }): string {
+  return content
+    .replace(/\{\{First Name\}\}/g, candidate.name.split(' ')[0])
+    .replace(/\{\{Current Company\}\}/g, candidate.company)
+    .replace(/\{\{Company Name\}\}/g, 'HCA Healthcare') // Fallback
+    .replace(/\{\{Your Name\}\}/g, 'Saurabh Agrawal') // Fallback
+    .replace(/\{\{Skill\}\}/g, candidate.skills[0] || 'healthcare');
 }

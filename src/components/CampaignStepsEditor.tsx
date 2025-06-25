@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Mail, Send, Eye, Plus, Trash2, Clock, User, Loader2, Save, Edit3, Copy, Play, EyeOff, X, Code, Type, Wand2 } from 'lucide-react';
 import { type EmailStep } from '../utils/openai';
 import { AuthContext } from './AuthWrapper';
 import { Project, createCampaign, updateCampaign, Campaign } from '../lib/supabase';
+import { generatePersonalizedContent } from '../utils/openai';
 
 interface CampaignStepsEditorProps {
   onBack: () => void;
@@ -32,6 +33,7 @@ const CampaignStepsEditor: React.FC<CampaignStepsEditorProps> = ({
   const [selectedTestCandidate, setSelectedTestCandidate] = useState('John Smith');
   const [viewMode, setViewMode] = useState<'html' | 'preview'>('html');
   const [isGeneratingPersonalization, setIsGeneratingPersonalization] = useState(false);
+  const [renderedPreviewHtml, setRenderedPreviewHtml] = useState<string>('');
 
   const testCandidates = [
     { name: 'John Smith', company: 'Memorial Healthcare', skills: ['Critical Care', 'Emergency Response', 'Patient Assessment'] },
@@ -318,75 +320,17 @@ const CampaignStepsEditor: React.FC<CampaignStepsEditorProps> = ({
     updateEmailStep(activeStep.id, 'content', activeStep.content + template);
   };
 
-  const generatePersonalizedPreview = async () => {
-    if (!activeStep || !selectedTestCandidate) return;
+  const applyBasicTokenReplacement = (content: string) => {
+    // Get the selected candidate
+    const selectedCandidate = testCandidates.find(c => c.name === selectedTestCandidate) || testCandidates[0];
     
-    setIsGeneratingPersonalization(true);
-    
-    try {
-      // In a real implementation, this would be an API call to generate personalized content
-      // For now, we'll simulate a delay and return a hardcoded personalized section
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      const selectedCandidate = testCandidates.find(c => c.name === selectedTestCandidate);
-      if (!selectedCandidate) {
-        throw new Error('Selected candidate not found');
-      }
-      
-      // Generate personalized content based on candidate data
-      const personalizationContent = `<p style="color: #555; font-size: 16px; margin: 15px 0; background-color: #f0f7ff; padding: 15px; border-left: 4px solid #0066cc; border-radius: 4px;">
-  I noticed your impressive experience at <strong style="color: #333;">${selectedCandidate.company}</strong>, particularly your expertise in <strong style="color: #333;">${selectedCandidate.skills[0]}</strong> and <strong style="color: #333;">${selectedCandidate.skills[1]}</strong>. These skills are exactly what we're looking for in our team.
-</p>`;
-      
-      // Replace the personalization section in the email content
-      let updatedContent = activeStep.content;
-      
-      if (updatedContent.includes('<!-- PERSONALIZATION_SECTION_START -->') && updatedContent.includes('<!-- PERSONALIZATION_SECTION_END -->')) {
-        const startTag = '<!-- PERSONALIZATION_SECTION_START -->';
-        const endTag = '<!-- PERSONALIZATION_SECTION_END -->';
-        const startIndex = updatedContent.indexOf(startTag);
-        const endIndex = updatedContent.indexOf(endTag) + endTag.length;
-        
-        updatedContent = updatedContent.substring(0, startIndex) + 
-                         startTag + 
-                         personalizationContent + 
-                         endTag + 
-                         updatedContent.substring(endIndex);
-      } else {
-        // If no personalization section exists, add one before the signature
-        const signatureIndex = updatedContent.lastIndexOf('<p style="color: #555; font-size: 16px; margin: 15px 0 0 0;">');
-        if (signatureIndex !== -1) {
-          updatedContent = updatedContent.substring(0, signatureIndex) + 
-                          `<!-- PERSONALIZATION_SECTION_START -->${personalizationContent}<!-- PERSONALIZATION_SECTION_END -->\n` + 
-                          updatedContent.substring(signatureIndex);
-        }
-      }
-      
-      // Update the email step with the personalized content for preview
-      setViewMode('preview');
-      updateEmailStep(activeStep.id, 'content', updatedContent);
-      
-    } catch (error) {
-      console.error('Error generating personalized preview:', error);
-      setSaveError('Failed to generate personalized preview');
-    } finally {
-      setIsGeneratingPersonalization(false);
-    }
-  };
-
-  const activeStep = emailSteps.find(step => step.id === activeStepId);
-  const selectedCandidate = testCandidates.find(c => c.name === selectedTestCandidate) || testCandidates[0];
-
-  const renderPreviewContent = (content: string) => {
     // Replace personalization tokens with actual values
-    let processedContent = content
+    return content
       .replace(/\{\{First Name\}\}/g, selectedCandidate.name.split(' ')[0])
       .replace(/\{\{Current Company\}\}/g, selectedCandidate.company)
       .replace(/\{\{Company Name\}\}/g, campaignData.companyName)
       .replace(/\{\{Your Name\}\}/g, campaignData.recruiterName)
       .replace(/\{\{Skill\}\}/g, selectedCandidate.skills[0] || 'healthcare');
-
-    return processedContent;
   };
 
   const renderPreviewSubject = (subject: string) => {
@@ -397,10 +341,57 @@ const CampaignStepsEditor: React.FC<CampaignStepsEditorProps> = ({
       .replace(/\{\{Your Name\}\}/g, campaignData.recruiterName);
   };
 
+  const generatePersonalizedPreview = async () => {
+    if (!activeStep || !selectedTestCandidate) return;
+    
+    setIsGeneratingPersonalization(true);
+    
+    try {
+      console.log('🤖 Generating personalized preview for:', selectedTestCandidate);
+      
+      const selectedCandidate = testCandidates.find(c => c.name === selectedTestCandidate);
+      if (!selectedCandidate) {
+        throw new Error('Selected candidate not found');
+      }
+      
+      // Generate personalized content based on candidate data
+      const personalizedHtml = await generatePersonalizedContent(
+        activeStep.content,
+        {
+          name: selectedCandidate.name,
+          company: selectedCandidate.company,
+          skills: selectedCandidate.skills
+        }
+      );
+      
+      // Set the personalized HTML for preview only
+      setRenderedPreviewHtml(personalizedHtml);
+      
+      // Switch to preview mode
+      setViewMode('preview');
+      
+    } catch (error) {
+      console.error('Error generating personalized preview:', error);
+      setSaveError('Failed to generate personalized preview');
+    } finally {
+      setIsGeneratingPersonalization(false);
+    }
+  };
+
   const hasPersonalizationSection = (content: string) => {
     return content.includes('<!-- PERSONALIZATION_SECTION_START -->') && 
            content.includes('<!-- PERSONALIZATION_SECTION_END -->');
   };
+
+  // Update rendered preview HTML when active step or selected candidate changes
+  useEffect(() => {
+    if (activeStep) {
+      setRenderedPreviewHtml(applyBasicTokenReplacement(activeStep.content));
+    }
+  }, [activeStep, selectedTestCandidate]);
+
+  const activeStep = emailSteps.find(step => step.id === activeStepId);
+  const selectedCandidate = testCandidates.find(c => c.name === selectedTestCandidate) || testCandidates[0];
 
   return (
     <div className="flex-1 flex flex-col bg-gray-50 h-screen">
@@ -685,7 +676,7 @@ const CampaignStepsEditor: React.FC<CampaignStepsEditorProps> = ({
                           />
                         ) : (
                           <div className="border border-gray-300 rounded-lg p-4 h-96 overflow-auto bg-white">
-                            <div dangerouslySetInnerHTML={{ __html: renderPreviewContent(activeStep.content) }} />
+                            <div dangerouslySetInnerHTML={{ __html: applyBasicTokenReplacement(activeStep.content) }} />
                           </div>
                         )}
                         
@@ -830,7 +821,7 @@ const CampaignStepsEditor: React.FC<CampaignStepsEditorProps> = ({
                   </div>
                   
                   <div className="text-gray-900">
-                    <div dangerouslySetInnerHTML={{ __html: renderPreviewContent(activeStep.content) }} />
+                    <div dangerouslySetInnerHTML={{ __html: renderedPreviewHtml || applyBasicTokenReplacement(activeStep.content) }} />
                   </div>
                 </div>
               </div>
