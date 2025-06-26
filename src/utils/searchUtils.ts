@@ -305,7 +305,7 @@ export async function searchCandidates(
   
   // STEP 3: AI analysis only on pre-filtered candidates with streaming
   console.log('🔧 STEP 3: Running AI analysis on keyword-matched candidates...');
-  const candidatesForAI = keywordMatches.slice(0, 20);
+  const candidatesForAI = keywordMatches.slice(0, 5);
   // const candidatesForBasicMatch = keywordMatches.slice(20);
   const aiMatches = await runAIAnalysisWithStreaming(candidatesForAI, searchQuery, onPartialResults);
   
