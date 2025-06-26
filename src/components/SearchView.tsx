@@ -36,7 +36,7 @@ const SearchView: React.FC<SearchViewProps> = ({
     total: number;
     message: string;
   } | null>(null);
-  const [showProTips, setShowProTips] = useState(true);
+  const [showProTips, setShowProTips] = useState(false);
   
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -194,7 +194,7 @@ const SearchView: React.FC<SearchViewProps> = ({
       {/* Main Content */}
       <div className="flex-1 flex">
         {/* Main Search Area */}
-        <div className={`flex-1 flex flex-col ${showProTips ? 'pr-0' : 'pr-0'}`}>
+        <div className="flex-1 flex flex-col">
           {/* Search Form */}
           <div className="p-6 bg-white border-b border-gray-200">
             <form onSubmit={handleSearch} className="max-w-4xl mx-auto">
@@ -334,39 +334,54 @@ const SearchView: React.FC<SearchViewProps> = ({
                   <Sparkles className="w-10 h-10 text-white" />
                 </div>
                 <h2 className="text-2xl font-semibold text-gray-900 mb-4">
-                  AI-Powered Candidate Search
+                  Intelligent Candidate Search
                 </h2>
                 <p className="text-gray-600 mb-8">
                   Describe the candidates you're looking for in natural language. Our AI will understand your requirements and find the best matches.
                 </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left mb-8">
-                  <div className="p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
-                    <div className="flex items-start gap-3">
-                      <div className="p-2 bg-purple-100 rounded-lg">
-                        <Sparkles className="w-5 h-5 text-purple-600" />
-                      </div>
-                      <div>
-                        <h3 className="font-medium text-gray-900 mb-1">Natural Language Search</h3>
-                        <p className="text-sm text-gray-600">
-                          Search using everyday language like "Experienced ICU nurses in Chicago"
-                        </p>
-                      </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                  <button 
+                    onClick={() => handleProTipClick("Registered Nurse in New York specializing in pediatric care, with 5+ years of experience")}
+                    className="p-4 text-left bg-white rounded-xl border border-gray-200 hover:border-purple-300 hover:shadow-sm transition-all"
+                  >
+                    <div className="flex items-center gap-2 text-sm text-gray-800">
+                      <Search className="w-4 h-4 text-purple-600" />
+                      <span>Registered Nurse in New York specializing in pediatric care, with 5+ years of experience</span>
                     </div>
-                  </div>
-                  <div className="p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
-                    <div className="flex items-start gap-3">
-                      <div className="p-2 bg-blue-100 rounded-lg">
-                        <Zap className="w-5 h-5 text-blue-600" />
-                      </div>
-                      <div>
-                        <h3 className="font-medium text-gray-900 mb-1">AI-Powered Matching</h3>
-                        <p className="text-sm text-gray-600">
-                          Our AI analyzes each candidate for the best possible match to your needs
-                        </p>
-                      </div>
+                  </button>
+                  
+                  <button 
+                    onClick={() => handleProTipClick("Clinical Nurse Specialist in London focusing on oncology, holding a master's degree")}
+                    className="p-4 text-left bg-white rounded-xl border border-gray-200 hover:border-purple-300 hover:shadow-sm transition-all"
+                  >
+                    <div className="flex items-center gap-2 text-sm text-gray-800">
+                      <Search className="w-4 h-4 text-purple-600" />
+                      <span>Clinical Nurse Specialist in London focusing on oncology, holding a master's degree</span>
                     </div>
-                  </div>
+                  </button>
+                  
+                  <button 
+                    onClick={() => handleProTipClick("Emergency Room Nurse in Los Angeles, bilingual in Spanish and English")}
+                    className="p-4 text-left bg-white rounded-xl border border-gray-200 hover:border-purple-300 hover:shadow-sm transition-all"
+                  >
+                    <div className="flex items-center gap-2 text-sm text-gray-800">
+                      <Search className="w-4 h-4 text-purple-600" />
+                      <span>Emergency Room Nurse in Los Angeles, bilingual in Spanish and English</span>
+                    </div>
+                  </button>
+                  
+                  <button 
+                    onClick={() => handleProTipClick("Healthcare Administrator in Toronto with 10+ years managing clinics")}
+                    className="p-4 text-left bg-white rounded-xl border border-gray-200 hover:border-purple-300 hover:shadow-sm transition-all"
+                  >
+                    <div className="flex items-center gap-2 text-sm text-gray-800">
+                      <Search className="w-4 h-4 text-purple-600" />
+                      <span>Healthcare Administrator in Toronto with 10+ years managing clinics</span>
+                    </div>
+                  </button>
                 </div>
+                
                 <div className="text-sm text-gray-500">
                   Try searching for specific skills, locations, experience levels, or education requirements
                 </div>
