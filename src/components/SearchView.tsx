@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Search, Sparkles, User, Bot, Edit, Share, Plus, FileText, Code, Users, Upload, Loader2, Filter, Eye, Clock, Zap } from 'lucide-react';
-import { SearchQuery, CandidateMatch, Candidate } from '../types';
-import { extractEntities } from '../utils/searchUtils';
+import { SearchQuery, CandidateMatch, Candidate, MatchExplanation } from '../types';
+import { extractEntities, calculateMatchWithAI } from '../utils/searchUtils';
 import { searchCandidatesWithStreaming } from '../utils/streamingSearch';
 import CandidateTable from './CandidateTable';
 import FilterModal from './FilterModal';
@@ -35,10 +35,10 @@ interface SearchViewProps {
   currentProject?: Project | null;
 }
 
-const SearchView: React.FC<SearchViewProps> = ({ 
-  onSearch, 
-  matches, 
-  isLoading, 
+const SearchView: React.FC<SearchViewProps> = ({
+  onSearch,
+  matches,
+  isLoading,
   recentSearches = [],
   candidates,
   currentProject
@@ -59,16 +59,16 @@ const SearchView: React.FC<SearchViewProps> = ({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const searchMethods = [
-    { 
-      id: 'natural', 
-      label: 'Natural Language', 
-      icon: Sparkles, 
+    {
+      id: 'natural',
+      label: 'Natural Language',
+      icon: Sparkles,
       placeholder: 'Describe the candidate you\'re looking for...'
     },
-    { 
-      id: 'jd', 
-      label: 'Job Description', 
-      icon: FileText, 
+    {
+      id: 'jd',
+      label: 'Job Description',
+      icon: FileText,
       placeholder: 'Paste job description here...'
     }
   ];
@@ -113,7 +113,7 @@ const SearchView: React.FC<SearchViewProps> = ({
 
     setMessages(prev => [...prev, userMessage]);
     setIsProcessing(true);
-    
+
     // Add processing message with animated progress
     const processingMessage: Message = {
       id: (Date.now() + 1).toString(),
@@ -132,14 +132,14 @@ const SearchView: React.FC<SearchViewProps> = ({
 
     try {
       console.log('🔍 Starting AI entity extraction...');
-      
+
       // Extract entities using AI
       const searchQuery = await extractEntities(inputValue);
       setCurrentSearchQuery(searchQuery);
-      
+
       console.log('✅ Entity extraction completed:', searchQuery);
       console.log('🔍 FILTER STATE DEBUG: About to create filters from searchQuery:', searchQuery);
-      
+
       // Create filters display object
       const filters = {
         jobTitles: searchQuery.extractedEntities.jobTitles,
@@ -156,7 +156,7 @@ const SearchView: React.FC<SearchViewProps> = ({
 
       // Remove processing message and add filter extraction result
       setMessages(prev => prev.filter(msg => !msg.isProcessing));
-      
+
       const assistantMessage: Message = {
         id: (Date.now() + 2).toString(),
         type: 'assistant',
@@ -166,23 +166,23 @@ const SearchView: React.FC<SearchViewProps> = ({
         searchQuery: searchQuery,
         showSearchButton: true
       };
-      
+
       setMessages(prev => [...prev, assistantMessage]);
       console.log('✅ Filter extraction UI updated');
-      
+
     } catch (error) {
       console.error('❌ Filter extraction error:', error);
-      
+
       // Remove processing message and show error
       setMessages(prev => prev.filter(msg => !msg.isProcessing));
-      
+
       const errorMessage: Message = {
         id: (Date.now() + 3).toString(),
         type: 'assistant',
         content: 'Sorry, I encountered an error while analyzing your query. Please try again or check your API key configuration.',
         timestamp: new Date()
       };
-      
+
       setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsProcessing(false);
@@ -205,7 +205,7 @@ const SearchView: React.FC<SearchViewProps> = ({
 
     setIsSearching(true);
     setCurrentMatches([]);
-    
+
     // Add searching message with progress tracking
     const searchingMessage: Message = {
       id: Date.now().toString(),
@@ -222,80 +222,500 @@ const SearchView: React.FC<SearchViewProps> = ({
     };
     setMessages(prev => [...prev, searchingMessage]);
 
+    // Simulate processing delay (e.g., 800ms)
+    await new Promise(res => setTimeout(res, 1200));
+
     try {
       console.log('🤖 Starting streaming search with real-time updates...');
-      
-      // Use streaming search for real-time results and capture the final result
-      const finalMatches = await searchCandidatesWithStreaming(
-        candidates, 
-        searchQuery,
-        (newMatches) => {
-          console.log('📊 Received streaming update:', newMatches.length, 'total matches');
-          setCurrentMatches(newMatches);
-        }
-      );
 
-      console.log('✅ Streaming search completed with final matches:', finalMatches.length);
-      console.log('🔍 FILTER STATE DEBUG: currentFilters after search completion:', currentFilters);
-      console.log('🔍 FILTER STATE DEBUG: currentSearchQuery after search completion:', currentSearchQuery);
+      // STEP 1: Apply basic filtering to get initial candidates immediately
+      console.log('🔧 STEP 1: Applying basic filtering for immediate results...');
+      const initialMatches = await getInitialCandidatesWithBasicFiltering(candidates, searchQuery);
 
-      // Remove searching message and add results based on FINAL matches count
-      setMessages(prev => prev.filter(msg => !msg.isProcessing));
-      
-      let resultsMessage: Message;
-      if (finalMatches.length === 0) {
-        resultsMessage = {
+      if (initialMatches.length === 0) {
+        // Remove searching message and show no results
+        setMessages(prev => prev.filter(msg => !msg.isProcessing));
+        const noResultsMessage: Message = {
           id: (Date.now() + 1).toString(),
           type: 'assistant',
           content: `❌ No candidates found matching your search criteria.`,
           timestamp: new Date(),
           noResultsFound: true
         };
-      } else {
-        resultsMessage = {
-          id: (Date.now() + 1).toString(),
-          type: 'assistant',
-          content: `🎯 Search complete! Found ${finalMatches.length} candidates using intelligent filtering + AI analysis. Results are being displayed with real-time scoring.`,
-          timestamp: new Date(),
-          noResultsFound: false
-        };
+        setMessages(prev => [...prev, noResultsMessage]);
+        return;
       }
-      
-      setMessages(prev => [...prev, resultsMessage]);
-      
+
+      // STEP 2: Immediately show initial candidates in table
+      console.log(`📊 Showing ${initialMatches.length} initial candidates in table...`);
+      setCurrentMatches(initialMatches);
+      setShowResults(true); // Immediately show the table
+
+      // Remove searching message and show initial results
+      setMessages(prev => prev.filter(msg => !msg.isProcessing));
+      const initialResultsMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        type: 'assistant',
+        content: `🎯 Found ${initialMatches.length} candidates! AI analysis is running in the background to improve match scores...`,
+        timestamp: new Date(),
+        noResultsFound: false
+      };
+      setMessages(prev => [...prev, initialResultsMessage]);
+
+      // STEP 3: Run AI analysis on each candidate and update table in real-time
+      console.log('🤖 STEP 3: Running AI analysis on candidates with real-time updates...');
+      await runAIAnalysisWithRealTimeUpdates(initialMatches, searchQuery);
+
       // Call the parent onSearch for any additional handling
       onSearch(searchQuery);
-      
+
     } catch (error) {
       console.error('❌ Search error:', error);
-      
+
       // Remove searching message and show error
       setMessages(prev => prev.filter(msg => !msg.isProcessing));
-      
+
       const errorMessage: Message = {
         id: (Date.now() + 2).toString(),
         type: 'assistant',
         content: 'Sorry, I encountered an error while searching candidates. Please try again.',
         timestamp: new Date()
       };
-      
+
       setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsSearching(false);
     }
   };
 
-  const handleViewResults = () => {
-    console.log('👀 Viewing results for', currentMatches.length, 'candidates');
-    console.log('🔍 FILTER STATE DEBUG: currentFilters when viewing results:', currentFilters);
-    setShowResults(true);
+  // New function to get initial candidates with basic filtering
+  const getInitialCandidatesWithBasicFiltering = async (candidates: Candidate[], searchQuery: SearchQuery): Promise<CandidateMatch[]> => {
+    console.log('🔧 Applying basic filtering for immediate results...');
+
+    // Apply hard filters first
+    const filteredCandidates = applyLenientHardFilters(candidates, searchQuery);
+    console.log(`✂️ Hard filters reduced candidates from ${candidates.length} to ${filteredCandidates.length}`);
+
+    if (filteredCandidates.length === 0) {
+      return [];
+    }
+
+    // Apply keyword matching
+    const keywordMatches = applySimpleKeywordMatching(filteredCandidates, searchQuery);
+    console.log(`🎯 Keyword matching selected ${keywordMatches.length} candidates`);
+
+    if (keywordMatches.length === 0) {
+      return [];
+    }
+
+    // Take top candidates and calculate basic scores
+    const topCandidates = keywordMatches.slice(0, 20);
+    const initialMatches: CandidateMatch[] = topCandidates.map(candidate => {
+      const explanation = calculateBasicMatch(candidate, searchQuery);
+      return { candidate, explanation, streamingExplanation: 'Analyzing...' };
+    });
+
+    // Sort by basic score
+    const sortedMatches = initialMatches.sort((a, b) => b.explanation.score - a.explanation.score);
+    console.log(`✅ Initial filtering complete: ${sortedMatches.length} candidates with basic scores`);
+
+    return sortedMatches;
+  };
+
+  // New function to run AI analysis with real-time table updates
+  const runAIAnalysisWithRealTimeUpdates = async (initialMatches: CandidateMatch[], searchQuery: SearchQuery) => {
+    console.log('🤖 Starting AI analysis with real-time table updates...');
+
+    const updatedMatches = [...initialMatches];
+
+    // Process candidates in smaller batches for better performance
+    const batchSize = 3;
+    for (let i = 0; i < updatedMatches.length; i += batchSize) {
+      const batch = updatedMatches.slice(i, i + batchSize);
+      console.log(`📦 Processing AI batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(updatedMatches.length/batchSize)} (${batch.length} candidates)`);
+
+      const batchPromises = batch.map(async (match, index) => {
+        const candidate = match.candidate;
+        console.log(`🔄 Starting AI analysis for candidate ${i + index + 1}: ${candidate.name}`);
+
+        try {
+          const aiExplanation = await calculateMatchWithAI(candidate, searchQuery, i + index + 1);
+          console.log(`✅ AI analysis complete for ${candidate.name}: Score ${aiExplanation.score}%, Category: ${aiExplanation.category}`);
+
+          // Stream the first reason by word with natural delay
+          const fullText = aiExplanation.reasons[0] || '';
+          const words = fullText.split(/(\s+)/); // keep spaces
+          let currentText = '';
+          for (let w = 0; w < words.length; w++) {
+            currentText += words[w];
+            // Update streamingExplanation for this candidate only, leave others untouched
+            setCurrentMatches(prevMatches =>
+              prevMatches.map(m =>
+                m.candidate.id === candidate.id
+                  ? { ...m, streamingExplanation: currentText }
+                  : m
+              )
+            );
+            // Random delay: 30-70ms, longer after punctuation
+            let delay = 30 + Math.random() * 40;
+            if (/[\.,!?]$/.test(words[w].trim())) delay += 80;
+            await new Promise(res => setTimeout(res, delay));
+          }
+          // After streaming, set the final explanation and remove streamingExplanation
+          const finalMatches = updatedMatches.map(m =>
+            m.candidate.id === candidate.id
+              ? { ...m, explanation: aiExplanation, streamingExplanation: undefined }
+              : m
+          );
+          setCurrentMatches([...finalMatches]);
+          // Also update in updatedMatches for next batches
+          const idx = updatedMatches.findIndex(m => m.candidate.id === candidate.id);
+          if (idx !== -1) updatedMatches[idx] = { ...updatedMatches[idx], explanation: aiExplanation, streamingExplanation: undefined };
+
+          return { candidate, explanation: aiExplanation };
+        } catch (error) {
+          console.log(`⚠️ AI analysis failed for ${candidate.name}, keeping basic score`);
+          return match; // Keep the original basic match
+        }
+      });
+
+      try {
+        await Promise.all(batchPromises);
+        // No need to update setCurrentMatches here, it's done in streaming
+        // Small delay between batches to respect rate limits
+        if (i + batchSize < updatedMatches.length) {
+          console.log('⏳ Waiting 300ms before next batch...');
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+      } catch (error) {
+        console.error('❌ Error processing AI batch:', error);
+        // Continue with next batch
+      }
+    }
+
+    console.log('🎯 AI analysis with real-time updates completed!');
+  };
+
+  // Helper functions (these would need to be imported or defined)
+  const applyLenientHardFilters = (candidates: Candidate[], searchQuery: SearchQuery): Candidate[] => {
+    // This function should be imported from searchUtils.ts
+    // For now, I'll create a simplified version
+    console.log('🔧 Applying lenient hard filters...');
+    const { extractedEntities } = searchQuery;
+
+    let filtered = candidates;
+
+    // Job Title Hard Filter (more lenient - partial matches)
+    if (extractedEntities.jobTitles && extractedEntities.jobTitles.length > 0) {
+      const beforeCount = filtered.length;
+      filtered = filtered.filter(candidate => {
+        if (!candidate || !candidate.jobTitle || typeof candidate.jobTitle !== 'string') {
+          return false;
+        }
+
+        const candidateTitle = candidate.jobTitle.toLowerCase();
+        return extractedEntities.jobTitles.some(title => {
+          if (!title || typeof title !== 'string') return false;
+
+          const titleLower = title.toLowerCase();
+          return (
+            candidateTitle.includes(titleLower) ||
+            titleLower.includes(candidateTitle) ||
+            (titleLower.includes('nurse') && candidateTitle.includes('nurse')) ||
+            (titleLower.includes('administrator') && candidateTitle.includes('administrator')) ||
+            (titleLower.includes('technologist') && candidateTitle.includes('technologist')) ||
+            (titleLower.includes('therapist') && candidateTitle.includes('therapist')) ||
+            (titleLower === 'rn' && candidateTitle.includes('nurse')) ||
+            (titleLower === 'np' && candidateTitle.includes('practitioner')) ||
+            (titleLower === 'lpn' && candidateTitle.includes('practical')) ||
+            (titleLower === 'cns' && candidateTitle.includes('specialist'))
+          );
+        });
+      });
+      console.log(`📋 Job title filter: ${beforeCount} → ${filtered.length} candidates`);
+    }
+
+    // Location Hard Filter (more lenient - partial matches)
+    if (extractedEntities.locations && extractedEntities.locations.length > 0) {
+      const beforeCount = filtered.length;
+      filtered = filtered.filter(candidate => {
+        if (!candidate || !candidate.location || typeof candidate.location !== 'string') {
+          return false;
+        }
+
+        const candidateLocation = candidate.location.toLowerCase();
+        return extractedEntities.locations.some(location => {
+          if (!location || typeof location !== 'string') return false;
+
+          const locationLower = location.toLowerCase();
+          return (
+            candidateLocation.includes(locationLower) || locationLower.includes(candidateLocation)
+          );
+        });
+      });
+      console.log(`📍 Location filter: ${beforeCount} → ${filtered.length} candidates`);
+    }
+
+    // Experience Hard Filter (more lenient - allow ±2 years variance)
+    if (extractedEntities.experienceRange && extractedEntities.experienceRange.min !== undefined) {
+      const beforeCount = filtered.length;
+      const minExp = Math.max(0, extractedEntities.experienceRange.min - 2);
+      const maxExp = extractedEntities.experienceRange.max ?
+        extractedEntities.experienceRange.max + 2 : undefined;
+
+      filtered = filtered.filter(candidate => {
+        if (!candidate || typeof candidate.experience !== 'number') {
+          return false;
+        }
+
+        if (maxExp !== undefined) {
+          return candidate.experience >= minExp && candidate.experience <= maxExp;
+        } else {
+          return candidate.experience >= minExp;
+        }
+      });
+      console.log(`⏱️ Experience filter (${minExp}${maxExp ? `-${maxExp}` : '+'}): ${beforeCount} → ${filtered.length} candidates`);
+    }
+
+    console.log(`✅ Lenient hard filters complete: ${candidates.length} → ${filtered.length} candidates`);
+    return filtered;
+  };
+
+  const applySimpleKeywordMatching = (candidates: Candidate[], searchQuery: SearchQuery): Candidate[] => {
+    console.log('🔧 Applying simple keyword matching for relevance scoring...');
+    const { extractedEntities, originalQuery } = searchQuery;
+
+    // Extract all keywords from the original query
+    const queryKeywords = originalQuery.toLowerCase()
+      .split(/\s+/)
+      .filter(word => word.length > 2)
+      .filter(word => !['the', 'and', 'or', 'in', 'at', 'with', 'for', 'of', 'to', 'a', 'an'].includes(word));
+
+    console.log('🔍 Query keywords:', queryKeywords);
+
+    // Calculate simple keyword scores for each candidate
+    const candidatesWithScores = candidates.map(candidate => {
+      if (!candidate) {
+        return { candidate, keywordScore: 0 };
+      }
+
+      let keywordScore = 0;
+
+      // Check job title keywords
+      if (candidate.jobTitle && typeof candidate.jobTitle === 'string') {
+        const titleWords = candidate.jobTitle.toLowerCase().split(/\s+/);
+        queryKeywords.forEach(keyword => {
+          if (titleWords.some(word => word.includes(keyword) || keyword.includes(word))) {
+            keywordScore += 15;
+          }
+        });
+      }
+
+      // Check skills keywords
+      if (candidate.skills && Array.isArray(candidate.skills)) {
+        const skillsText = candidate.skills.join(' ').toLowerCase();
+        queryKeywords.forEach(keyword => {
+          if (skillsText.includes(keyword)) {
+            keywordScore += 10;
+          }
+        });
+      }
+
+      // Check summary keywords
+      if (candidate.summary && typeof candidate.summary === 'string') {
+        const summaryText = candidate.summary.toLowerCase();
+        queryKeywords.forEach(keyword => {
+          if (summaryText.includes(keyword)) {
+            keywordScore += 5;
+          }
+        });
+      }
+
+      // Check location keywords
+      if (candidate.location && typeof candidate.location === 'string') {
+        const locationText = candidate.location.toLowerCase();
+        queryKeywords.forEach(keyword => {
+          if (locationText.includes(keyword)) {
+            keywordScore += 12;
+          }
+        });
+      }
+
+      // Bonus for specific skill matches
+      if (extractedEntities.skills && extractedEntities.skills.length > 0 && candidate.skills && Array.isArray(candidate.skills)) {
+        const skillMatches = extractedEntities.skills.filter(skill =>
+          candidate.skills.some(candidateSkill => {
+            if (!skill || !candidateSkill || typeof skill !== 'string' || typeof candidateSkill !== 'string') {
+              return false;
+            }
+            return candidateSkill.toLowerCase().includes(skill.toLowerCase()) ||
+                   skill.toLowerCase().includes(candidateSkill.toLowerCase());
+          })
+        );
+        keywordScore += skillMatches.length * 8;
+      }
+
+      // Availability bonus
+      if (candidate.availability === 'available') {
+        keywordScore += 5;
+      } else if (candidate.availability === 'passive') {
+        keywordScore += 3;
+      }
+
+      return { candidate, keywordScore };
+    });
+
+    // Sort by keyword score and take candidates with meaningful scores
+    const sortedCandidates = candidatesWithScores
+      .filter(item => item.keywordScore > 0)
+      .sort((a, b) => b.keywordScore - a.keywordScore);
+
+    const result = sortedCandidates.map(item => item.candidate);
+    console.log(`✅ Keyword matching complete: Selected ${result.length} candidates for AI analysis`);
+    return result;
+  };
+
+  const calculateBasicMatch = (candidate: Candidate, searchQuery: SearchQuery): MatchExplanation => {
+    if (!candidate) {
+      return {
+        score: 0,
+        reasons: ['Invalid candidate data'],
+        category: 'potential'
+      };
+    }
+
+    console.log(`🔄 Calculating basic match for ${candidate.name || 'Unknown'}...`);
+
+    let score = 0;
+    const reasons: string[] = [];
+    const { extractedEntities } = searchQuery;
+
+    // Job title matching (40% weight) - more lenient
+    const jobTitleMatch = extractedEntities.jobTitles?.some(title => {
+      if (!title || typeof title !== 'string' || !candidate.jobTitle || typeof candidate.jobTitle !== 'string') {
+        return false;
+      }
+
+      const titleLower = title.toLowerCase();
+      const candidateTitleLower = candidate.jobTitle.toLowerCase();
+      return (
+        candidateTitleLower.includes(titleLower) ||
+        titleLower.includes(candidateTitleLower) ||
+        (titleLower.includes('nurse') && candidateTitleLower.includes('nurse')) ||
+        (titleLower.includes('administrator') && candidateTitleLower.includes('administrator'))
+      );
+    });
+
+    if (jobTitleMatch) {
+      score += 40;
+      reasons.push(`Job title alignment: ${candidate.jobTitle || 'Unknown'}`);
+    } else if (!extractedEntities.jobTitles || extractedEntities.jobTitles.length === 0) {
+      score += 20;
+      reasons.push(`Healthcare professional: ${candidate.jobTitle || 'Unknown'}`);
+    }
+
+    // Location matching (25% weight) - more lenient
+    const locationMatch = extractedEntities.locations?.some(location => {
+      if (!location || typeof location !== 'string' || !candidate.location || typeof candidate.location !== 'string') {
+        return false;
+      }
+
+      const locationLower = location.toLowerCase();
+      const candidateLocationLower = candidate.location.toLowerCase();
+      return (
+        candidateLocationLower.includes(locationLower) ||
+        locationLower.includes(candidateLocationLower)
+      );
+    });
+
+    if (locationMatch) {
+      score += 25;
+      reasons.push(`Located in target area: ${candidate.location || 'Unknown'}`);
+    } else if (!extractedEntities.locations || extractedEntities.locations.length === 0) {
+      score += 15;
+      reasons.push(`Available location: ${candidate.location || 'Unknown'}`);
+    }
+
+    // Experience matching (20% weight) - more lenient
+    if (extractedEntities.experienceRange && (extractedEntities.experienceRange.min || extractedEntities.experienceRange.max)) {
+      const minExp = Math.max(0, (extractedEntities.experienceRange.min || 0) - 2);
+      const maxExp = extractedEntities.experienceRange.max ?
+        extractedEntities.experienceRange.max + 2 : 50;
+
+      const candidateExp = candidate.experience || 0;
+
+      if (candidateExp >= minExp && candidateExp <= maxExp) {
+        score += 20;
+        reasons.push(`Experience level: ${candidateExp} years meets requirements`);
+      } else if (candidateExp >= minExp - 2) {
+        score += 10;
+        reasons.push(`Close experience match: ${candidateExp} years`);
+      }
+    } else {
+      score += 15;
+      reasons.push(`${candidate.experience || 0} years of experience`);
+    }
+
+    // Skills matching (15% weight) - more lenient
+    const skillMatches = extractedEntities.skills?.filter(skill => {
+      if (!skill || typeof skill !== 'string' || !candidate.skills || !Array.isArray(candidate.skills)) {
+        return false;
+      }
+
+      return candidate.skills.some(candidateSkill => {
+        if (!candidateSkill || typeof candidateSkill !== 'string') return false;
+        return candidateSkill.toLowerCase().includes(skill.toLowerCase()) ||
+               skill.toLowerCase().includes(candidateSkill.toLowerCase());
+      });
+    }) || [];
+
+    if (skillMatches.length > 0) {
+      score += Math.min(15, skillMatches.length * 5);
+      reasons.push(`Relevant skills: ${skillMatches.join(', ')}`);
+    } else {
+      score += 5;
+      const candidateSkills = candidate.skills && Array.isArray(candidate.skills) ? candidate.skills : [];
+      reasons.push(`Professional skills: ${candidateSkills.slice(0, 2).join(', ') || 'Various skills'}`);
+    }
+
+    // Add base score for healthcare industry
+    if (candidate.industry === 'Healthcare') {
+      score += 10;
+      reasons.push('Healthcare industry experience');
+    }
+
+    // Availability bonus
+    if (candidate.availability === 'available') {
+      score += 5;
+      reasons.push('Currently available');
+    } else if (candidate.availability === 'passive') {
+      score += 3;
+      reasons.push('Open to opportunities');
+    }
+
+    // Determine category with lower thresholds
+    let category: 'excellent' | 'good' | 'potential';
+    if (score >= 85) category = 'excellent';
+    else if (score >= 65) category = 'good';
+    else category = 'potential';
+
+    if (reasons.length === 0) {
+      reasons.push('Healthcare professional profile');
+    }
+
+    // Ensure minimum score of 30 for any healthcare professional
+    const finalScore = Math.max(score, 30);
+
+    const result = { score: finalScore, reasons, category };
+    console.log(`🔄 Basic match result for ${candidate.name || 'Unknown'}:`, result);
+    return result;
   };
 
   const handleEditFilters = (filters: any) => {
     console.log('✏️ Editing filters:', filters);
     console.log('🔍 FILTER STATE DEBUG: handleEditFilters called with:', filters);
     setCurrentFilters(filters);
-    
+
     // Update the search query with new filters
     if (currentSearchQuery) {
       const updatedQuery: SearchQuery = {
@@ -318,7 +738,7 @@ const SearchView: React.FC<SearchViewProps> = ({
   const handleRecentSearchClick = async (search: string) => {
     console.log('🔍 Clicked recent search:', search);
     console.log('🔍 FILTER STATE DEBUG: handleRecentSearchClick called for:', search);
-    
+
     if (!currentProject) {
       console.error('❌ No current project selected');
       return;
@@ -327,7 +747,7 @@ const SearchView: React.FC<SearchViewProps> = ({
     try {
       // Try to load saved search results with extracted entities
       const { data: searchData, error, extracted_entities } = await getSearchResults(search, currentProject.id);
-      
+
       if (error) {
         console.error('❌ Error loading search results:', error);
         // Fall back to new search
@@ -338,7 +758,7 @@ const SearchView: React.FC<SearchViewProps> = ({
       if (searchData && searchData.length > 0) {
         console.log('✅ Loaded saved search data:', searchData.length);
         console.log('🔍 FILTER STATE DEBUG: Retrieved extracted_entities:', extracted_entities);
-        
+
         // Convert database candidates to frontend format
         const candidateMatches: CandidateMatch[] = searchData.map((result: any) => {
           // Find the candidate in our current candidates array
@@ -347,7 +767,7 @@ const SearchView: React.FC<SearchViewProps> = ({
             console.warn('⚠️ Candidate not found for result:', result.candidate_id);
             return null;
           }
-          
+
           return {
             candidate,
             explanation: {
@@ -361,12 +781,12 @@ const SearchView: React.FC<SearchViewProps> = ({
         setCurrentMatches(candidateMatches);
         setShowResults(true);
         setRecentSearchContext(search);
-        
+
         // Extract filters from the saved search record
         if (extracted_entities) {
           console.log('🔍 Found saved extracted entities:', extracted_entities);
           console.log('🔍 FILTER STATE DEBUG: extracted_entities from database:', extracted_entities);
-          
+
           const filters = {
             jobTitles: extracted_entities.jobTitles || [],
             locations: extracted_entities.locations || [],
@@ -375,11 +795,11 @@ const SearchView: React.FC<SearchViewProps> = ({
             industries: extracted_entities.industries || [],
             education: extracted_entities.education
           };
-          
+
           console.log('🔍 FILTER STATE DEBUG: Created filters from database entities:', filters);
           setCurrentFilters(filters);
           console.log('🔍 FILTER STATE DEBUG: Called setCurrentFilters with database filters:', filters);
-          
+
           // Create search query object
           const searchQuery: SearchQuery = {
             originalQuery: search,
@@ -387,12 +807,12 @@ const SearchView: React.FC<SearchViewProps> = ({
           };
           setCurrentSearchQuery(searchQuery);
           console.log('🔍 FILTER STATE DEBUG: Set currentSearchQuery from database:', searchQuery);
-          
+
           console.log('✅ Filters loaded from database:', filters);
         } else {
           console.log('⚠️ No extracted entities found in saved search, extracting from query...');
           console.log('🔍 FILTER STATE DEBUG: No extracted_entities in database, falling back to extraction');
-          
+
           // Fallback: extract entities from the search string
           try {
             const searchQuery = await extractEntities(search);
@@ -422,7 +842,7 @@ const SearchView: React.FC<SearchViewProps> = ({
               education: null
             };
             setCurrentFilters(basicFilters);
-            
+
             const basicSearchQuery: SearchQuery = {
               originalQuery: search,
               extractedEntities: {
@@ -439,7 +859,7 @@ const SearchView: React.FC<SearchViewProps> = ({
             console.log('🔍 FILTER STATE DEBUG: Set basic filters and searchQuery:', { basicFilters, basicSearchQuery });
           }
         }
-        
+
         // Clear any existing messages and show a simple message about loaded results
         setMessages([]);
         const loadedMessage: Message = {
@@ -449,7 +869,7 @@ const SearchView: React.FC<SearchViewProps> = ({
           timestamp: new Date()
         };
         setMessages([loadedMessage]);
-        
+
         console.log('✅ Displaying saved search results');
         console.log('🔍 FILTER STATE DEBUG: Final state after recent search load - currentFilters:', currentFilters);
       } else {
@@ -482,7 +902,7 @@ const SearchView: React.FC<SearchViewProps> = ({
     };
 
     window.addEventListener('recentSearchClick', handleExternalRecentSearch as EventListener);
-    
+
     return () => {
       window.removeEventListener('recentSearchClick', handleExternalRecentSearch as EventListener);
     };
@@ -505,7 +925,7 @@ const SearchView: React.FC<SearchViewProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <button 
+            <button
               onClick={() => {
                 console.log('🔄 Starting new search session...');
                 console.log('🔍 FILTER STATE DEBUG: New search button clicked, clearing all state');
@@ -569,7 +989,7 @@ const SearchView: React.FC<SearchViewProps> = ({
                     <h2 className="text-2xl font-semibold text-gray-900 mb-3">
                       Intelligent Candidate Search
                     </h2>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-4xl mx-auto">
                       {[
                         "Registered Nurse in New York specializing in pediatric care, with 5+ years of experience",
@@ -617,7 +1037,7 @@ const SearchView: React.FC<SearchViewProps> = ({
                         <div className="flex-1">
                           <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
                             <p className="text-gray-800">{message.content}</p>
-                            
+
                             {/* Progress indicator for processing messages */}
                             {message.isProcessing && message.searchProgress && (
                               <div className="mt-4 p-4 bg-gray-50 rounded-lg">
@@ -628,7 +1048,7 @@ const SearchView: React.FC<SearchViewProps> = ({
                                   </span>
                                 </div>
                                 <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
-                                  <div 
+                                  <div
                                     className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                                     style={{ width: `${(message.searchProgress.current / message.searchProgress.total) * 100}%` }}
                                   ></div>
@@ -636,7 +1056,7 @@ const SearchView: React.FC<SearchViewProps> = ({
                                 <p className="text-xs text-gray-600">{message.searchProgress.message}</p>
                               </div>
                             )}
-                            
+
                             {/* No Results Found UI */}
                             {message.type === 'assistant' && message.noResultsFound && (
                               <div className="mt-6 p-6 bg-red-50 border border-red-200 rounded-xl text-center">
@@ -675,7 +1095,7 @@ const SearchView: React.FC<SearchViewProps> = ({
                                 </div>
                               </div>
                             )}
-                            
+
                             {message.type === 'assistant' && message.extractedFilters && !message.isProcessing && !message.noResultsFound && (
                               <div className="mt-6">
                                 {/* Extracted Filters Display */}
@@ -685,7 +1105,7 @@ const SearchView: React.FC<SearchViewProps> = ({
                                     AI-Extracted Search Criteria
                                     <span className="ml-auto text-xs text-gray-500">Ready for search</span>
                                   </h4>
-                                  
+
                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {message.extractedFilters.jobTitles?.length > 0 && (
                                       <div>
@@ -697,7 +1117,7 @@ const SearchView: React.FC<SearchViewProps> = ({
                                             </span>
                                           ))}
                                           {message.extractedFilters.jobTitles.length > 3 && (
-                                            <span 
+                                            <span
                                               className="px-2 py-1 bg-gray-100 text-gray-600 rounded-md text-xs cursor-pointer hover:bg-gray-200"
                                               title={message.extractedFilters.jobTitles.slice(3).join(', ')}
                                             >
@@ -707,7 +1127,7 @@ const SearchView: React.FC<SearchViewProps> = ({
                                         </div>
                                       </div>
                                     )}
-                                    
+
                                     {message.extractedFilters.locations?.length > 0 && (
                                       <div>
                                         <span className="text-xs font-medium text-gray-600 uppercase tracking-wide">Locations</span>
@@ -720,7 +1140,7 @@ const SearchView: React.FC<SearchViewProps> = ({
                                         </div>
                                       </div>
                                     )}
-                                    
+
                                     {message.extractedFilters.experienceRange?.min && (
                                       <div>
                                         <span className="text-xs font-medium text-gray-600 uppercase tracking-wide">Experience</span>
@@ -742,7 +1162,7 @@ const SearchView: React.FC<SearchViewProps> = ({
                                             </span>
                                           ))}
                                           {message.extractedFilters.skills.length > 3 && (
-                                            <span 
+                                            <span
                                               className="px-2 py-1 bg-gray-100 text-gray-600 rounded-md text-xs cursor-pointer hover:bg-gray-200"
                                               title={message.extractedFilters.skills.slice(3).join(', ')}
                                             >
@@ -778,10 +1198,10 @@ const SearchView: React.FC<SearchViewProps> = ({
                                     )}
                                   </div>
                                 </div>
-                                
+
                                 {message.showSearchButton && (
                                   <div className="flex gap-3">
-                                    <button 
+                                    <button
                                       onClick={() => {
                                         console.log('✏️ Opening filter editor...');
                                         setShowFilterModal(true);
@@ -791,7 +1211,7 @@ const SearchView: React.FC<SearchViewProps> = ({
                                       <Edit className="w-4 h-4" />
                                       Edit Filters
                                     </button>
-                                    <button 
+                                    <button
                                       onClick={() => {
                                         console.log('🚀 Starting streaming candidate search...');
                                         handleSearchCandidates(message.searchQuery!);
@@ -813,19 +1233,6 @@ const SearchView: React.FC<SearchViewProps> = ({
                                     </button>
                                   </div>
                                 )}
-                              </div>
-                            )}
-
-                            {/* Show results button after search is complete */}
-                            {message.type === 'assistant' && !message.isProcessing && !message.showSearchButton && !message.noResultsFound && currentMatches.length > 0 && (
-                              <div className="mt-4">
-                                <button 
-                                  onClick={handleViewResults}
-                                  className="flex items-center gap-2 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium transition-colors"
-                                >
-                                  <Eye className="w-4 h-4" />
-                                  View {currentMatches.length} Results
-                                </button>
                               </div>
                             )}
                           </div>
@@ -901,8 +1308,8 @@ const SearchView: React.FC<SearchViewProps> = ({
           </div>
         ) : (
           /* Results View */
-          <CandidateTable 
-            matches={currentMatches} 
+          <CandidateTable
+            matches={currentMatches}
             onBack={() => setShowResults(false)}
             onEditFilters={() => setShowFilterModal(true)}
             currentFilters={currentFilters}

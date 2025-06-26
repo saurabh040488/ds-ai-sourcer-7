@@ -39,6 +39,7 @@ export interface MatchExplanation {
 export interface CandidateMatch {
   candidate: Candidate;
   explanation: MatchExplanation;
+  streamingExplanation?: string;
 }
 
 // New types for enhanced campaign flow
