@@ -420,15 +420,15 @@ const SearchView: React.FC<SearchViewProps> = ({
           const titleLower = title.toLowerCase();
           return (
             candidateTitle.includes(titleLower) ||
-            titleLower.includes(candidateTitle) ||
-            (titleLower.includes('nurse') && candidateTitle.includes('nurse')) ||
-            (titleLower.includes('administrator') && candidateTitle.includes('administrator')) ||
-            (titleLower.includes('technologist') && candidateTitle.includes('technologist')) ||
-            (titleLower.includes('therapist') && candidateTitle.includes('therapist')) ||
-            (titleLower === 'rn' && candidateTitle.includes('nurse')) ||
-            (titleLower === 'np' && candidateTitle.includes('practitioner')) ||
-            (titleLower === 'lpn' && candidateTitle.includes('practical')) ||
-            (titleLower === 'cns' && candidateTitle.includes('specialist'))
+            titleLower.includes(candidateTitle)
+            // (titleLower.includes('nurse') && candidateTitle.includes('nurse')) ||
+            // (titleLower.includes('administrator') && candidateTitle.includes('administrator')) ||
+            // (titleLower.includes('technologist') && candidateTitle.includes('technologist')) ||
+            // (titleLower.includes('therapist') && candidateTitle.includes('therapist')) ||
+            // (titleLower === 'rn' && candidateTitle.includes('nurse')) ||
+            // (titleLower === 'np' && candidateTitle.includes('practitioner')) ||
+            // (titleLower === 'lpn' && candidateTitle.includes('practical')) ||
+            // (titleLower === 'cns' && candidateTitle.includes('specialist'))
           );
         });
       });
