@@ -420,15 +420,15 @@ const SearchView: React.FC<SearchViewProps> = ({
           const titleLower = title.toLowerCase();
           return (
             candidateTitle.includes(titleLower) ||
-            titleLower.includes(candidateTitle)
-            // (titleLower.includes('nurse') && candidateTitle.includes('nurse')) ||
-            // (titleLower.includes('administrator') && candidateTitle.includes('administrator')) ||
-            // (titleLower.includes('technologist') && candidateTitle.includes('technologist')) ||
-            // (titleLower.includes('therapist') && candidateTitle.includes('therapist')) ||
-            // (titleLower === 'rn' && candidateTitle.includes('nurse')) ||
-            // (titleLower === 'np' && candidateTitle.includes('practitioner')) ||
-            // (titleLower === 'lpn' && candidateTitle.includes('practical')) ||
-            // (titleLower === 'cns' && candidateTitle.includes('specialist'))
+            titleLower.includes(candidateTitle) ||
+            (titleLower.includes('nurse') && candidateTitle.includes('nurse')) ||
+            (titleLower.includes('administrator') && candidateTitle.includes('administrator')) ||
+            (titleLower.includes('technologist') && candidateTitle.includes('technologist')) ||
+            (titleLower.includes('therapist') && candidateTitle.includes('therapist')) ||
+            (titleLower === 'rn' && candidateTitle.includes('nurse')) ||
+            (titleLower === 'np' && candidateTitle.includes('practitioner')) ||
+            (titleLower === 'lpn' && candidateTitle.includes('practical')) ||
+            (titleLower === 'cns' && candidateTitle.includes('specialist')) 
           );
         });
       });
@@ -459,9 +459,9 @@ const SearchView: React.FC<SearchViewProps> = ({
     // Experience Hard Filter (more lenient - allow ±2 years variance)
     if (extractedEntities.experienceRange && extractedEntities.experienceRange.min !== undefined) {
       const beforeCount = filtered.length;
-      const minExp = Math.max(0, extractedEntities.experienceRange.min - 0);
+      const minExp = Math.max(0, extractedEntities.experienceRange.min - 2);
       const maxExp = extractedEntities.experienceRange.max ?
-        extractedEntities.experienceRange.max + 0 : undefined;
+        extractedEntities.experienceRange.max + 2 : undefined;
 
       filtered = filtered.filter(candidate => {
         if (!candidate || typeof candidate.experience !== 'number') {
