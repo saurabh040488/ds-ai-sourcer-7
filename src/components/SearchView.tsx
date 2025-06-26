@@ -459,9 +459,9 @@ const SearchView: React.FC<SearchViewProps> = ({
     // Experience Hard Filter (more lenient - allow ±2 years variance)
     if (extractedEntities.experienceRange && extractedEntities.experienceRange.min !== undefined) {
       const beforeCount = filtered.length;
-      const minExp = Math.max(0, extractedEntities.experienceRange.min - 2);
+      const minExp = Math.max(0, extractedEntities.experienceRange.min - 0);
       const maxExp = extractedEntities.experienceRange.max ?
-        extractedEntities.experienceRange.max + 2 : undefined;
+        extractedEntities.experienceRange.max + 0 : undefined;
 
       filtered = filtered.filter(candidate => {
         if (!candidate || typeof candidate.experience !== 'number') {
