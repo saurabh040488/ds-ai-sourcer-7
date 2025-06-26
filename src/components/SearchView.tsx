@@ -428,10 +428,11 @@ const SearchView: React.FC<SearchViewProps> = ({
             (titleLower === 'rn' && candidateTitle.includes('nurse')) ||
             (titleLower === 'np' && candidateTitle.includes('practitioner')) ||
             (titleLower === 'lpn' && candidateTitle.includes('practical')) ||
-            (titleLower === 'cns' && candidateTitle.includes('specialist')) 
+            (titleLower === 'cns' && candidateTitle.includes('specialist'))
           );
         });
       });
+      // dummy commit
       console.log(`📋 Job title filter: ${beforeCount} → ${filtered.length} candidates`);
     }
 
