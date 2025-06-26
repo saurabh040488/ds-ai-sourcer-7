@@ -385,9 +385,9 @@ function applyLenientHardFilters(candidates: Candidate[], searchQuery: SearchQue
   // Experience Hard Filter (more lenient - allow ±2 years variance)
   if (extractedEntities.experienceRange && extractedEntities.experienceRange.min !== undefined) {
     const beforeCount = filtered.length;
-    const minExp = Math.max(0, extractedEntities.experienceRange.min - 2); // Allow 2 years less
+    const minExp = Math.max(0, extractedEntities.experienceRange.min - 0); // Allow 2 years less
     const maxExp = extractedEntities.experienceRange.max ? 
-      extractedEntities.experienceRange.max + 2 : undefined; // Allow 2 years more
+      extractedEntities.experienceRange.max + 0 : undefined; // Allow 2 years more
     
     filtered = filtered.filter(candidate => {
       if (!candidate || typeof candidate.experience !== 'number') {
