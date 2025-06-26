@@ -644,7 +644,7 @@ async function runAIAnalysisWithStreaming(
   return sortedMatches;
 }
 
-async function calculateMatchWithAI(candidate: Candidate, searchQuery: SearchQuery, candidateNumber: number): Promise<MatchExplanation> {
+export async function calculateMatchWithAI(candidate: Candidate, searchQuery: SearchQuery, candidateNumber: number): Promise<MatchExplanation> {
   // Get AI configuration for candidate matching
   const modelConfig = getAIModelForTask('candidateMatching');
   const promptConfig = getPromptForTask('candidateMatching');
