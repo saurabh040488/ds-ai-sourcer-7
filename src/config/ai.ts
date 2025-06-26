@@ -51,7 +51,7 @@ export const AI_MODELS: Record<string, AIModelConfig> = {
 export const AI_TASK_MODELS = {
   entityExtraction: 'gpt-4o-mini',
   jobTitleExpansion: 'gpt-4o-mini',
-  candidateMatching: 'gpt-4o',
+  candidateMatching: 'gpt-4o-mini',
   campaignGeneration: 'gpt-4o',
   jobExtraction: 'gpt-4o-mini',
   companyBranding: 'gpt-4o',
